@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import LoginPortal from './components/LoginPortal';
 import MainLayout from './components/MainLayout';
 import DashboardPortal from './components/DashboardPortal';
@@ -20,10 +20,20 @@ import SalaryStructuresView from './components/SalaryStructuresView';
 import SalaryRulesView from './components/SalaryRulesView';
 import ReportsView from './components/ReportsView';
 import SettingsView from './components/SettingsView';
+import { getAccessToken, clearTokens } from './api';
 
 function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  // Restore auth state from localStorage token on page refresh
+  const [isAuthenticated, setIsAuthenticated] = useState(() => !!getAccessToken());
   const [currentView, setCurrentView] = useState('dashboard');
+
+  const handleSignIn = () => setIsAuthenticated(true);
+
+  const handleLogout = () => {
+    clearTokens();
+    setIsAuthenticated(false);
+    setCurrentView('dashboard');
+  };
 
   const renderView = () => {
     switch (currentView) {
@@ -59,9 +69,9 @@ function App() {
   return (
     <>
       {!isAuthenticated ? (
-        <LoginPortal onSignIn={() => setIsAuthenticated(true)} />
+        <LoginPortal onSignIn={handleSignIn} />
       ) : (
-        <MainLayout currentView={currentView} onNavigate={setCurrentView}>
+        <MainLayout currentView={currentView} onNavigate={setCurrentView} onLogout={handleLogout}>
           {renderView()}
         </MainLayout>
       )}

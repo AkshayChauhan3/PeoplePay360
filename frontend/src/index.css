@@ -94,6 +94,11 @@
   }
 }
 
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
 @layer components {
   /* Complex Component Classes from Vanilla UI that are easier to keep than re-write entirely in Tailwind utilities */
   

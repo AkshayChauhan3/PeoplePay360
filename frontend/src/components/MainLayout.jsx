@@ -23,7 +23,7 @@ const breadcrumbs = {
   settings: 'System › Settings',
 };
 
-const MainLayout = ({ currentView, onNavigate, children }) => {
+const MainLayout = ({ currentView, onNavigate, onLogout, children }) => {
   return (
     <div className="dashboard-wrapper">
       <Sidebar currentView={currentView} onNavigate={onNavigate} />
@@ -70,6 +70,19 @@ const MainLayout = ({ currentView, onNavigate, children }) => {
               <div className="avatar">
                 <img src="https://i.pravatar.cc/150?u=a042581f4e29026024d" alt="Elena Vance" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
               </div>
+              {onLogout && (
+                <button
+                  title="Sign out"
+                  onClick={onLogout}
+                  style={{ background: 'none', border: '1px solid var(--border-structural)', borderRadius: '6px', padding: '0.35rem 0.5rem', cursor: 'pointer', color: 'var(--text-secondary)', marginLeft: '0.5rem', display: 'flex', alignItems: 'center' }}
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                    <polyline points="16 17 21 12 16 7"/>
+                    <line x1="21" y1="12" x2="9" y2="12"/>
+                  </svg>
+                </button>
+              )}
             </div>
           </div>
         </header>
