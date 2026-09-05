@@ -1,5 +1,6 @@
 import React from 'react';
 import Logo from './Logo';
+import { isViewAllowed, ROLE_LABELS, ROLE_BADGE_COLORS } from '../utils/rbac';
 
 const NAV = [
   { id: 'dashboard', label: 'Dashboard' },
@@ -53,17 +54,55 @@ const NAV = [
   },
 ];
 
-const Sidebar = ({ currentView, onNavigate }) => {
+const Sidebar = ({ currentView, onNavigate, currentUser }) => {
+  const userRole = (currentUser?.role || 'ADMIN').toUpperCase();
+  const badgeStyle = ROLE_BADGE_COLORS[userRole] || ROLE_BADGE_COLORS.EMPLOYEE;
+  const roleTitle = ROLE_LABELS[userRole] || 'Staff';
+
   return (
     <aside className="sidebar">
       <div className="sidebar-brand">
         <Logo />
       </div>
 
+      {/* Role Pill Banner */}
+      <div style={{ padding: '0 1rem 0.75rem 1rem' }}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '6px 10px',
+          background: badgeStyle.bg,
+          border: `1px solid ${badgeStyle.border}33`,
+          borderRadius: '8px',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{
+              width: '8px',
+              height: '8px',
+              borderRadius: '50%',
+              background: badgeStyle.text,
+              display: 'inline-block'
+            }} />
+            <span style={{
+              fontSize: '11px',
+              fontWeight: 700,
+              color: badgeStyle.text,
+              letterSpacing: '0.04em',
+              textTransform: 'uppercase'
+            }}>
+              {roleTitle}
+            </span>
+          </div>
+          <span style={{ fontSize: '9px', fontWeight: 600, color: 'var(--text-secondary)' }}>RBAC</span>
+        </div>
+      </div>
+
       <div className="sidebar-nav">
         {NAV.map((item, i) => {
           if (item.id) {
-            // Top-level single item (Dashboard)
+            // Top-level item
+            if (!isViewAllowed(userRole, item.id)) return null;
             return (
               <div key={i} className="nav-section">
                 <a
@@ -76,10 +115,15 @@ const Sidebar = ({ currentView, onNavigate }) => {
               </div>
             );
           }
+
+          // Section filtering by RBAC
+          const allowedItems = item.items.filter(navItem => isViewAllowed(userRole, navItem.id));
+          if (allowedItems.length === 0) return null;
+
           return (
             <div key={i} className="nav-section">
               <div className="nav-section-title">{item.section}</div>
-              {item.items.map(navItem => (
+              {allowedItems.map(navItem => (
                 <a
                   key={navItem.id}
                   href="#"
@@ -95,15 +139,11 @@ const Sidebar = ({ currentView, onNavigate }) => {
       </div>
 
       <div className="sidebar-footer">
-        <div className="flex items-center gap-2" style={{ color: 'var(--success)', fontWeight: '600' }}>
-          <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10" /></svg>
-          v2.4 Operational
+        <div className="flex items-center gap-2" style={{ color: 'var(--success)', fontWeight: '600', fontSize: '11px' }}>
+          <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="10" r="10" /></svg>
+          RBAC Active
         </div>
-        <svg style={{ color: 'var(--text-secondary)' }} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-          <circle cx="12" cy="12" r="10" />
-          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
-          <line x1="12" y1="17" x2="12.01" y2="17" />
-        </svg>
+        <span style={{ fontSize: '10px', color: 'var(--text-secondary)' }}>PeoplePay360</span>
       </div>
     </aside>
   );
