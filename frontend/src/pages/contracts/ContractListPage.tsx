@@ -13,14 +13,10 @@ export const ContractListPage: React.FC = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   // New contract form state
-  const [newRef, setNewRef] = useState(`CON/2026/00${Math.floor(Math.random() * 90 + 10)}`);
+  const [newRef, setNewRef] = useState('CON/2026/0048');
   const [newEmpId, setNewEmpId] = useState('emp-1');
   const [newWage, setNewWage] = useState(85000);
   const [newStartDate, setNewStartDate] = useState('2026-01-01');
-
-  useEffect(() => {
-    loadContracts();
-  }, []);
 
   const loadContracts = async () => {
     try {
@@ -33,6 +29,10 @@ export const ContractListPage: React.FC = () => {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    loadContracts();
+  }, []);
 
   const handleCreateContract = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -19,7 +19,7 @@ const AttendanceContext = createContext<AttendanceContextType | undefined>(undef
 export const AttendanceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [hasActiveSession, setHasActiveSession] = useState<boolean>(true);
   const [sessionId, setSessionId] = useState<string | null>('att-sess-1');
-  const [checkInTime, setCheckInTime] = useState<string | null>(new Date(Date.now() - 4.5 * 3600 * 1000).toISOString());
+  const [checkInTime, setCheckInTime] = useState<string | null>('2026-09-05T09:48:00.000Z');
   const [elapsedSeconds, setElapsedSeconds] = useState<number>(16200);
   const [isPunching, setIsPunching] = useState<boolean>(false);
 

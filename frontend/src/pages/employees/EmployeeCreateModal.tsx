@@ -13,7 +13,7 @@ export const EmployeeCreateModal: React.FC<EmployeeCreateModalProps> = ({ isOpen
   const [departments, setDepartments] = useState<DepartmentOut[]>([]);
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState<EmployeeCreateIn>({
-    employee_code: `EMP00${Math.floor(Math.random() * 90 + 10)}`,
+    employee_code: 'EMP0042',
     first_name: '',
     last_name: '',
     work_email: '',

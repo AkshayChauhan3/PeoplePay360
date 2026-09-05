@@ -36,7 +36,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         const me = await apiService.getMe();
         setUser(me);
-      } catch (err) {
+      } catch {
         setUser(mockUsers[0]);
       } finally {
         setLoading(false);
