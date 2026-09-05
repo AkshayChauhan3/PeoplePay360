@@ -1269,14 +1269,16 @@ components:
 
     UserCreateIn:
       type: object
-      required: [email, password, role]
+      required: [email, password]
       properties:
         email: { type: string, format: email }
         password: { type: string, format: password, minLength: 8 }
-        emp_id: { type: string, format: uuid, nullable: true }
-        role:
-          type: string
-          enum: [EMPLOYEE, HR_MANAGER, HR_PAYROLL_USER, HR_PAYROLL_MANAGER, ADMIN]
+        employee_id: { type: integer, nullable: true }
+        role_id:
+          type: integer
+          nullable: true
+          example: 1
+          description: "Role ID referencing the roles table (defaults to 1 / EMPLOYEE if omitted)"
 
     UserUpdateIn:
       type: object

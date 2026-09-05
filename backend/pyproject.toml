@@ -1,7 +1,7 @@
 [project]
 name = "peoplepay360"
-version = "0.0.1"
-description = "PeoplePay360 — HR & Payroll Backend (v0.0.1: User + Auth Foundation)"
+version = "0.0.4"
+description = "PeoplePay360 — HR & Payroll Backend (v0.0.4: Attendance Management)"
 authors = [{ name = "PeoplePay360 Team" }]
 requires-python = ">=3.12"
 
@@ -35,13 +35,16 @@ dev = [
 ]
 
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
 testpaths = ["tests"]
-
-[tool.hatch.build.targets.wheel]
-packages = ["app"]
 

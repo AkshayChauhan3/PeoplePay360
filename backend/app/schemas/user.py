@@ -1,17 +1,18 @@
-import uuid
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
-
-from app.models.user import UserRole
-
 
 class UserCreate(BaseModel):
     """Schema for creating a new user account."""
 
-    emp_id: uuid.UUID | None = Field(
+    role_id: int | None = Field(
         default=None,
-        description="Optional link to an employee record (populated once Employee module is live)",
+        description="Role ID referencing the roles table (defaults to 1 / EMPLOYEE if omitted)",
+    )
+    employee_id: int | None = Field(
+        default=None,
+        description="Optional 1:1 link to an existing employee record",
     )
     email: EmailStr = Field(..., description="Unique email address used for login")
     password: str = Field(
@@ -20,7 +21,13 @@ class UserCreate(BaseModel):
         max_length=128,
         description="Plaintext password (hashed before storage; never persisted or returned)",
     )
-    role: UserRole = Field(default=UserRole.EMPLOYEE, description="User role")
+
+    @field_validator("employee_id", "role_id", mode="before")
+    @classmethod
+    def sanitize_optional_ids(cls, v: Any) -> Any:
+        if v == 0 or v == "0" or v == "":
+            return None
+        return v
 
     @field_validator("password")
     @classmethod
@@ -36,13 +43,20 @@ class UserCreate(BaseModel):
 class UserResponse(BaseModel):
     """Safe public representation of a user — never includes password fields."""
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
-    id: uuid.UUID
-    emp_id: uuid.UUID | None
+    id: int
+    employee_id: int | None = None
     email: EmailStr
-    role: UserRole
+    role_id: int
+    role: str
     is_active: bool
     created_at: datetime
     updated_at: datetime
 
+    @field_validator("role", mode="before")
+    @classmethod
+    def extract_role_name(cls, v: Any) -> str:
+        if hasattr(v, "name"):
+            return v.name
+        return str(v)

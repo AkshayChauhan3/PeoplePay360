@@ -3,8 +3,8 @@ Test fixtures for PeoplePay360.
 
 Strategy: single DATABASE_URL, per-test transaction rollback isolation.
 - The schema is created once at the start of the test session.
-- Each test runs inside a transaction that is rolled back after the test,
-  so every test starts with a clean slate without dropping/recreating tables.
+- Roles are seeded at the session level so every test has system roles.
+- Each test runs inside a transaction that is rolled back after the test.
 """
 
 import asyncio
@@ -15,6 +15,7 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
 from app.core.config import settings
 from app.db.base import Base
@@ -22,22 +23,13 @@ from app.db.database import get_db
 from app.main import app
 
 # ---------------------------------------------------------------------------
-# Async event loop — session-scoped
-# ---------------------------------------------------------------------------
-
-@pytest.fixture(scope="session")
-def event_loop_policy():
-    return asyncio.DefaultEventLoopPolicy()
-
-
-# ---------------------------------------------------------------------------
-# Test engine — reuses the application DATABASE_URL
+# Test engine — reuses the application DATABASE_URL with NullPool
 # ---------------------------------------------------------------------------
 
 _test_engine = create_async_engine(
     settings.database_url,
     echo=False,
-    pool_pre_ping=True,
+    poolclass=NullPool,
 )
 
 _TestSessionLocal = async_sessionmaker(
@@ -50,23 +42,31 @@ _TestSessionLocal = async_sessionmaker(
 
 
 # ---------------------------------------------------------------------------
-# Schema setup — once per test session
+# Schema setup & role seeding — once per test session
 # ---------------------------------------------------------------------------
+
 
 @pytest_asyncio.fixture(scope="session", autouse=True)
 async def create_tables() -> AsyncGenerator[None, None]:
-    """Create all tables at the start of the session; drop them after."""
+    """Create all tables and seed standard roles at the start of the session."""
     async with _test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+    # Seed the 5 system roles so all tests can reference them
+    async with _TestSessionLocal() as session:
+        from app.services.role_service import seed_default_roles
+        await seed_default_roles(session)
+        await session.commit()
+
     yield
-    async with _test_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+
     await _test_engine.dispose()
 
 
 # ---------------------------------------------------------------------------
 # Per-test transactional session (rollback isolation)
 # ---------------------------------------------------------------------------
+
 
 @pytest_asyncio.fixture
 async def db_session() -> AsyncGenerator[AsyncSession, None]:
@@ -88,6 +88,7 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
 # HTTP client — overrides get_db with the transactional session
 # ---------------------------------------------------------------------------
 
+
 @pytest_asyncio.fixture
 async def async_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     """AsyncClient wired to the test database session."""
@@ -105,8 +106,9 @@ async def async_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, 
 
 
 # ---------------------------------------------------------------------------
-# Convenience factories
+# Convenience factories (Phase 1 backward-compatible)
 # ---------------------------------------------------------------------------
+
 
 @pytest_asyncio.fixture
 async def registered_user(async_client: AsyncClient) -> dict[str, Any]:
@@ -116,7 +118,7 @@ async def registered_user(async_client: AsyncClient) -> dict[str, Any]:
         json={
             "email": "test@example.com",
             "password": "TestPass1",
-            "role": "EMPLOYEE",
+            "role_id": 1,
         },
     )
     assert response.status_code == 201
@@ -133,3 +135,114 @@ async def auth_tokens(async_client: AsyncClient, registered_user: dict[str, Any]
     assert response.status_code == 200
     return response.json()
 
+
+# ---------------------------------------------------------------------------
+# Role-based authentication helper fixtures (Phase 2)
+# ---------------------------------------------------------------------------
+
+_ROLE_NAME_TO_ID = {
+    "EMPLOYEE": 1,
+    "HR_MANAGER": 2,
+    "HR_PAYROLL_USER": 3,
+    "HR_PAYROLL_MANAGER": 4,
+    "ADMIN": 5,
+}
+
+
+async def _create_and_login_role_user(async_client: AsyncClient, email: str, role: str) -> dict[str, str]:
+    role_id = _ROLE_NAME_TO_ID.get(role, 1)
+    await async_client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": email,
+            "password": "Password123",
+            "role_id": role_id,
+        },
+    )
+    login_res = await async_client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": "Password123"},
+    )
+    assert login_res.status_code == 200
+    token = login_res.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest_asyncio.fixture
+async def admin_auth_headers(async_client: AsyncClient) -> dict[str, str]:
+    """Return auth headers for an ADMIN user."""
+    return await _create_and_login_role_user(async_client, "admin_user@example.com", "ADMIN")
+
+
+@pytest_asyncio.fixture
+async def hr_manager_auth_headers(async_client: AsyncClient) -> dict[str, str]:
+    """Return auth headers for an HR_MANAGER user."""
+    return await _create_and_login_role_user(async_client, "hrm_user@example.com", "HR_MANAGER")
+
+
+@pytest_asyncio.fixture
+async def hr_payroll_user_auth_headers(async_client: AsyncClient) -> dict[str, str]:
+    """Return auth headers for an HR_PAYROLL_USER user."""
+    return await _create_and_login_role_user(async_client, "hrpu_user@example.com", "HR_PAYROLL_USER")
+
+
+@pytest_asyncio.fixture
+async def hr_payroll_manager_auth_headers(async_client: AsyncClient) -> dict[str, str]:
+    """Return auth headers for an HR_PAYROLL_MANAGER user."""
+    return await _create_and_login_role_user(async_client, "hrpm_user@example.com", "HR_PAYROLL_MANAGER")
+
+
+@pytest_asyncio.fixture
+async def employee_auth_headers(async_client: AsyncClient) -> dict[str, str]:
+    """Return auth headers for an EMPLOYEE user."""
+    return await _create_and_login_role_user(async_client, "emp_user@example.com", "EMPLOYEE")
+
+
+@pytest_asyncio.fixture
+async def sample_department(async_client: AsyncClient, hr_manager_auth_headers: dict[str, str]) -> dict[str, Any]:
+    """Create a sample department and return its JSON response."""
+    res = await async_client.post(
+        "/api/v1/departments",
+        json={"name": "Engineering", "code": "ENG", "description": "Software Engineering"},
+        headers=hr_manager_auth_headers,
+    )
+    assert res.status_code == 201
+    return res.json()
+
+
+@pytest_asyncio.fixture
+async def sample_job_position(async_client: AsyncClient, hr_manager_auth_headers: dict[str, str]) -> dict[str, Any]:
+    """Create a sample job position and return its JSON response."""
+    res = await async_client.post(
+        "/api/v1/job-positions",
+        json={"name": "Software Engineer", "code": "SWE", "description": "Backend Engineer"},
+        headers=hr_manager_auth_headers,
+    )
+    assert res.status_code == 201
+    return res.json()
+
+
+@pytest_asyncio.fixture
+async def sample_employee(
+    async_client: AsyncClient,
+    hr_manager_auth_headers: dict[str, str],
+    sample_department: dict[str, Any],
+    sample_job_position: dict[str, Any],
+) -> dict[str, Any]:
+    """Create a sample employee and return their JSON response."""
+    res = await async_client.post(
+        "/api/v1/employees",
+        json={
+            "employee_code": "EMP100",
+            "first_name": "Test",
+            "last_name": "Worker",
+            "email": "testworker@example.com",
+            "joining_date": "2024-01-01",
+            "department_id": sample_department["id"],
+            "job_position_id": sample_job_position["id"],
+            "status": "ACTIVE",
+        },
+        headers=hr_manager_auth_headers,
+    )
+    assert res.status_code == 201
+    return res.json()

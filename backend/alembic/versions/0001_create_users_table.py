@@ -18,7 +18,8 @@ down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
-# PostgreSQL ENUM definition
+# PostgreSQL ENUM definition — create_type=False because we manage
+# creation explicitly in upgrade() using a safe DO block.
 userrole_enum = postgresql.ENUM(
     "EMPLOYEE",
     "HR_MANAGER",
@@ -26,24 +27,32 @@ userrole_enum = postgresql.ENUM(
     "HR_PAYROLL_MANAGER",
     "ADMIN",
     name="userrole",
+    create_type=False,
 )
 
 
 def upgrade() -> None:
-    # Enable the uuid-ossp / pgcrypto extension for gen_random_uuid()
-    # gen_random_uuid() is built-in since PostgreSQL 13; the extension is a
-    # fallback for PG 12 and below.
+    # Enable pgcrypto for gen_random_uuid() (built-in since PG 13).
     op.execute("CREATE EXTENSION IF NOT EXISTS pgcrypto")
 
-    # Create the ENUM type
-    userrole_enum.create(op.get_bind(), checkfirst=True)
+    # Create the ENUM type — safe to re-run, silently skips if it exists.
+    op.execute("""
+        DO $$ BEGIN
+            CREATE TYPE userrole AS ENUM (
+                'EMPLOYEE', 'HR_MANAGER', 'HR_PAYROLL_USER',
+                'HR_PAYROLL_MANAGER', 'ADMIN'
+            );
+        EXCEPTION
+            WHEN duplicate_object THEN NULL;
+        END $$;
+    """)
 
     op.create_table(
         "users",
         sa.Column(
             "id",
-            postgresql.UUID(as_uuid=True),
-            server_default=sa.text("gen_random_uuid()"),
+            sa.Integer(),
+            autoincrement=True,
             nullable=False,
         ),
         sa.Column("emp_id", postgresql.UUID(as_uuid=True), nullable=True),

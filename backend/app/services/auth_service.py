@@ -73,10 +73,9 @@ async def refresh_tokens(db: AsyncSession, refresh_token: str) -> TokenResponse:
     except JWTError:
         raise invalid_token_error
 
-    import uuid  # local import to keep module-level imports clean
     try:
-        user_id = uuid.UUID(payload.sub)
-    except ValueError:
+        user_id = int(payload.sub)
+    except (ValueError, TypeError):
         raise invalid_token_error
 
     user = await get_user_by_id(db, user_id)
