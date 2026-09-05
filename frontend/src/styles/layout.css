@@ -1,0 +1,264 @@
+/* Executive FinTech Minimalism Layout according to DESIGN (1).md */
+
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+  background-color: var(--bg-app); /* #F7FAFA */
+}
+
+/* Sidebar */
+.app-sidebar {
+  width: var(--sidebar-width); /* 260px */
+  background-color: var(--bg-surface); /* #FFFFFF */
+  border-right: 1px solid var(--border-hairline); /* #E5EAEA */
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  z-index: 50;
+  transition: width var(--transition-smooth);
+}
+
+.sidebar-header {
+  height: var(--header-height); /* 64px */
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--border-hairline);
+}
+
+.logo-icon {
+  width: 34px;
+  height: 34px;
+  background-color: var(--primary); /* #3B123F */
+  border-radius: var(--radius-control);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--on-primary);
+  font-weight: 800;
+  font-size: 16px;
+  letter-spacing: -0.02em;
+}
+
+.logo-text {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.logo-accent {
+  color: var(--secondary); /* #005166 */
+}
+
+.sidebar-nav {
+  flex: 1;
+  padding: 16px 10px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.nav-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-secondary); /* #49636A */
+  letter-spacing: 0.05em;
+  padding: 12px 12px 4px 12px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: var(--radius-control); /* 8px */
+  font-weight: 500;
+  font-size: 13.5px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  border: 1px solid transparent;
+}
+
+.nav-item:hover {
+  background-color: var(--bg-surface-subtle);
+  color: var(--text-primary);
+}
+
+/* Active primary navigation node uses Light Purple Tint (#F6F0F7) */
+.nav-item.active {
+  background-color: var(--purple-tint); /* #F6F0F7 */
+  color: var(--primary); /* #3B123F */
+  font-weight: 600;
+  border-color: rgba(59, 18, 63, 0.12);
+}
+
+.sidebar-footer {
+  padding: 14px 20px;
+  border-top: 1px solid var(--border-hairline);
+  background-color: var(--bg-surface);
+}
+
+/* Main Content Area */
+.app-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* Top Header */
+.app-header {
+  height: var(--header-height); /* 64px */
+  background-color: var(--bg-surface); /* #FFFFFF */
+  border-bottom: 1px solid var(--border-hairline);
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Live Attendance Session Widget */
+.session-widget-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background-color: var(--bg-app);
+  border: 1px solid var(--border-hairline);
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.session-widget-btn:hover {
+  border-color: var(--border-medium);
+}
+
+.session-widget-btn.session-active {
+  background-color: var(--teal-tint); /* #EEF7F7 */
+  border-color: rgba(0, 81, 102, 0.25);
+}
+
+.session-indicator-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--text-muted);
+}
+
+.session-widget-btn.session-active .session-indicator-dot {
+  background-color: var(--secondary); /* #005166 */
+  animation: pulseGlow 1.5s infinite;
+}
+
+.session-timer-text {
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+/* Backend Mode Pill */
+.backend-mode-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  user-select: none;
+  border: 1px solid transparent;
+}
+
+.backend-mode-pill.live {
+  background-color: var(--teal-tint);
+  color: var(--secondary);
+  border-color: rgba(0, 81, 102, 0.2);
+}
+
+.backend-mode-pill.mock {
+  background-color: var(--purple-tint);
+  color: var(--primary);
+  border-color: rgba(59, 18, 63, 0.2);
+}
+
+/* Page Layout */
+.page-container {
+  padding: 24px 32px; /* 1.5rem (24px) / 2rem (32px) margins */
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  max-width: 1600px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.page-title-group h1 {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  color: var(--text-primary);
+}
+
+.page-title-group p {
+  color: var(--text-secondary);
+  font-size: 13px;
+  margin-top: 2px;
+}
+
+.page-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+@media (max-width: 1024px) {
+  .app-sidebar {
+    width: var(--sidebar-condensed-width);
+  }
+  .logo-text, .nav-item span, .nav-section-title {
+    display: none;
+  }
+  .page-container {
+    padding: 16px;
+  }
+}

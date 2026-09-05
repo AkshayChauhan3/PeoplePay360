@@ -1,0 +1,517 @@
+/* Executive FinTech Minimalism Components according to DESIGN (1).md */
+
+/* ==========================================================================
+   1. BUTTONS
+   ========================================================================== */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 20px;
+  height: 42px; /* Standard button height */
+  padding: 0 16px;
+  border-radius: var(--radius-control); /* 8px */
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast), transform var(--transition-fast);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.btn:active {
+  transform: scale(0.99);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Primary Imperial Purple */
+.btn-primary {
+  background-color: var(--primary); /* #3B123F */
+  color: var(--on-primary);
+  border: none;
+}
+.btn-primary:hover:not(:disabled) {
+  background-color: var(--primary-hover); /* #542052 */
+}
+
+/* Secondary Ocean Teal (Analytical Actions) */
+.btn-secondary {
+  background-color: var(--secondary); /* #005166 */
+  color: var(--on-secondary);
+  border: none;
+}
+.btn-secondary:hover:not(:disabled) {
+  background-color: var(--secondary-hover); /* #064252 */
+}
+
+/* Outline / Neutral */
+.btn-outline, .btn-neutral {
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border-hairline);
+}
+.btn-outline:hover:not(:disabled), .btn-neutral:hover:not(:disabled) {
+  background-color: var(--bg-app);
+  border-color: var(--border-medium);
+}
+
+/* Status Action Buttons */
+.btn-success {
+  background-color: var(--secondary);
+  color: #FFFFFF;
+}
+.btn-success:hover:not(:disabled) {
+  background-color: var(--secondary-hover);
+}
+
+.btn-danger {
+  background-color: #BA1A1A;
+  color: #FFFFFF;
+}
+.btn-danger:hover:not(:disabled) {
+  background-color: #93000A;
+}
+
+/* Button Sizing */
+.btn-sm {
+  height: 36px;
+  padding: 0 12px;
+  font-size: 13px;
+  border-radius: var(--radius-control);
+}
+
+.btn-lg {
+  height: 48px;
+  padding: 0 24px;
+  font-size: 15px;
+  border-radius: var(--radius-control);
+}
+
+.btn-icon {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-control);
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.btn-icon:hover {
+  background-color: var(--bg-surface-subtle);
+  color: var(--text-primary);
+}
+
+/* ==========================================================================
+   2. INPUT FIELDS & SELECTS
+   ========================================================================== */
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px; /* 6px vertical proximity */
+  margin-bottom: 1rem;
+}
+
+.form-label {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 16px;
+  letter-spacing: 0.02em;
+  color: var(--text-secondary); /* #49636A */
+}
+
+.form-input, .form-select, .form-textarea {
+  width: 100%;
+  height: 42px;
+  padding: 0 12px;
+  font-size: 14px;
+  border: 1px solid var(--border-hairline); /* 1px solid #E5EAEA */
+  border-radius: var(--radius-control); /* 8px */
+  background-color: var(--bg-surface);
+  color: var(--text-primary); /* #241C24 */
+  outline: none;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.form-textarea {
+  height: auto;
+  padding: 10px 12px;
+}
+
+.form-input::placeholder, .form-textarea::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.6;
+}
+
+.form-input:focus, .form-select:focus, .form-textarea:focus {
+  border-color: var(--border-active); /* #005166 */
+  box-shadow: 0 0 0 3px rgba(0, 81, 102, 0.12);
+}
+
+.form-input.error, .form-select.error {
+  border-color: #D32F2F;
+  box-shadow: 0 0 0 3px rgba(211, 47, 47, 0.12);
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+}
+
+.search-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.search-input-wrapper svg {
+  position: absolute;
+  left: 12px;
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+.search-input-wrapper input {
+  padding-left: 36px;
+}
+
+/* ==========================================================================
+   3. CARDS & METRIC CONTAINERS (Tier 1 Surface)
+   ========================================================================== */
+.card {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-card); /* 12px */
+  box-shadow: var(--elevation-tier1);
+  overflow: hidden;
+}
+
+.card-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-hairline);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.card-body {
+  padding: 20px;
+}
+
+.card-footer {
+  padding: 14px 20px;
+  border-top: 1px solid var(--border-hairline);
+  background-color: var(--bg-surface-subtle);
+}
+
+.stat-card {
+  padding: 20px; /* 20px */
+  border-radius: var(--radius-card); /* 12px */
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-hairline);
+  box-shadow: var(--elevation-tier1);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.stat-card:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--elevation-tier2);
+}
+
+.stat-icon-wrapper {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-control);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ==========================================================================
+   4. STATUS BADGES & PILLS
+   ========================================================================== */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 14px;
+  letter-spacing: 0.02em;
+  border-radius: var(--radius-pill); /* 9999px */
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* Success / Completed: bg #EEF7F7, text #005166, border 1px solid rgba(0,81,102,0.15) */
+.badge-success {
+  background-color: var(--status-success-bg);
+  color: var(--status-success-text);
+  border: 1px solid var(--status-success-border);
+}
+
+/* Pending / In Review: bg #F6F0F7, text #3B123F, border 1px solid rgba(59,18,63,0.15) */
+.badge-warning, .badge-pending, .badge-purple {
+  background-color: var(--status-pending-bg);
+  color: var(--status-pending-text);
+  border: 1px solid var(--status-pending-border);
+}
+
+/* Critical / Rejected: bg #FFF2F2, text #B71C1C, border 1px solid rgba(183,28,28,0.15) */
+.badge-danger, .badge-error {
+  background-color: var(--status-danger-bg);
+  color: var(--status-danger-text);
+  border: 1px solid var(--status-danger-border);
+}
+
+/* Neutral / Draft: bg #F7FAFA, text #49636A, border 1px solid #E5EAEA */
+.badge-neutral, .badge-info {
+  background-color: var(--status-neutral-bg);
+  color: var(--status-neutral-text);
+  border: 1px solid var(--status-neutral-border);
+}
+
+/* ==========================================================================
+   5. DATA TABLES
+   ========================================================================== */
+.table-container {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-card);
+  background-color: var(--bg-surface);
+  box-shadow: var(--elevation-tier1);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 14px;
+}
+
+.table th {
+  height: 40px;
+  padding: 0 16px;
+  background-color: var(--bg-app); /* #F7FAFA */
+  color: var(--text-secondary); /* #49636A */
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--border-hairline);
+}
+
+.table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-hairline);
+  color: var(--text-primary);
+  vertical-align: middle;
+}
+
+.table tr:last-child td {
+  border-bottom: none;
+}
+
+.table tr:hover td {
+  background-color: var(--teal-tint); /* #EEF7F7 */
+}
+
+/* Right-aligned Tabular Numeric Cells */
+.table td.numeric, .table th.numeric {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* ==========================================================================
+   6. SMART BUTTONS (Odoo-Style Action Counters)
+   ========================================================================== */
+.smart-button-group {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.smart-button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 14px;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-control);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.smart-button:hover {
+  background-color: var(--purple-tint); /* #F6F0F7 */
+  border-color: var(--primary);
+  transform: translateY(-1px);
+}
+
+.smart-button-icon {
+  color: var(--primary);
+}
+
+.smart-button-content {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+}
+
+.smart-button-count {
+  font-weight: 700;
+  font-size: 16px;
+  line-height: 1.1;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.smart-button-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ==========================================================================
+   7. MODALS & CONFIRMATION DRAWERS (Tier 3 Depth)
+   ========================================================================== */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: var(--modal-backdrop-tint); /* rgba(59, 18, 63, 0.45) */
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+  padding: 1rem;
+  animation: fadeIn 0.15s ease-out;
+}
+
+.modal-content {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-modal); /* 14px */
+  width: 100%;
+  max-width: 600px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--elevation-tier3); /* 0 12px 48px rgba(36, 28, 36, 0.12) */
+  overflow: hidden;
+}
+
+.modal-content.modal-lg {
+  max-width: 850px;
+}
+
+.modal-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-hairline);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.modal-header h3 {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+.modal-body {
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.modal-footer {
+  padding: 14px 20px;
+  border-top: 1px solid var(--border-hairline);
+  background-color: var(--bg-surface-subtle);
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+/* ==========================================================================
+   8. LIFECYCLE STEPPER (Payrun Wizard & Batch States)
+   ========================================================================== */
+.lifecycle-stepper {
+  display: flex;
+  align-items: center;
+  background-color: var(--bg-surface-subtle);
+  padding: 4px;
+  border-radius: var(--radius-pill);
+  gap: 4px;
+  width: fit-content;
+}
+
+.lifecycle-step {
+  padding: 4px 14px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  transition: all var(--transition-fast);
+}
+
+.lifecycle-step.active {
+  background-color: var(--primary);
+  color: #FFFFFF;
+}
+
+.lifecycle-step.completed {
+  background-color: var(--teal-tint);
+  color: var(--secondary);
+}
+
+/* ==========================================================================
+   9. KANBAN VIEW
+   ========================================================================== */
+.kanban-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 1.25rem;
+}
+
+.kanban-card {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-card);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  cursor: pointer;
+  box-shadow: var(--elevation-tier1);
+  transition: all var(--transition-fast);
+}
+
+.kanban-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--primary);
+  box-shadow: var(--elevation-tier2);
+}

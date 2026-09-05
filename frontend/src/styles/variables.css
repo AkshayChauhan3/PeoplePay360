@@ -1,0 +1,81 @@
+/* Executive FinTech Minimalism - Color Palette & Tokens according to DESIGN (1).md */
+
+:root {
+  /* Brand Foundation */
+  --primary: #3B123F;               /* Primary Imperial Purple */
+  --primary-hover: #542052;         /* Hover State */
+  --primary-deep: #200025;
+  --on-primary: #FFFFFF;
+
+  --secondary: #005166;             /* Secondary Ocean Teal */
+  --secondary-hover: #064252;       /* Deep Ocean Teal */
+  --secondary-deep: #064252;
+  --on-secondary: #FFFFFF;
+
+  --tertiary: #542052;              /* Secondary Purple */
+  --on-tertiary: #FFFFFF;
+
+  /* Surfaces & Canvases */
+  --bg-app: #F7FAFA;                /* Tier 0 Neutral Background */
+  --bg-surface: #FFFFFF;            /* Tier 1 Base Surface */
+  --bg-surface-subtle: #F1F4F4;
+  --bg-surface-container: #EBEEEE;
+
+  /* Tonal Accent Tints */
+  --teal-tint: #EEF7F7;             /* Light Teal Tint */
+  --purple-tint: #F6F0F7;           /* Light Purple Tint */
+  --error-tint: #FFF2F2;            /* Light Error Tint */
+
+  /* Text & Labels */
+  --text-primary: #241C24;          /* Primary Slate Black */
+  --text-secondary: #49636A;        /* Secondary Teal Slate */
+  --text-muted: #7F747D;            /* Outline Grey */
+  --text-inverse: #FFFFFF;
+
+  /* Structural Borders */
+  --border-hairline: #E5EAEA;       /* Uniform structural border */
+  --border-medium: #CED7D8;         /* Input hover / Checkbox border */
+  --border-active: #005166;         /* Teal focus border */
+
+  /* Status Colors */
+  --status-success-bg: #EEF7F7;
+  --status-success-text: #005166;
+  --status-success-border: rgba(0, 81, 102, 0.15);
+
+  --status-pending-bg: #F6F0F7;
+  --status-pending-text: #3B123F;
+  --status-pending-border: rgba(59, 18, 63, 0.15);
+
+  --status-danger-bg: #FFF2F2;
+  --status-danger-text: #B71C1C;
+  --status-danger-border: rgba(183, 28, 28, 0.15);
+
+  --status-neutral-bg: #F7FAFA;
+  --status-neutral-text: #49636A;
+  --status-neutral-border: #E5EAEA;
+
+  /* Elevations (Tiered Depth Architecture) */
+  --elevation-tier0: none;
+  --elevation-tier1: 0 1px 3px rgba(36, 28, 36, 0.03), 0 4px 12px rgba(6, 66, 82, 0.02);
+  --elevation-tier2: 0 4px 16px rgba(36, 28, 36, 0.06), 0 8px 32px rgba(6, 66, 82, 0.04);
+  --elevation-tier3: 0 12px 48px rgba(36, 28, 36, 0.12);
+  --modal-backdrop-tint: rgba(59, 18, 63, 0.45);
+
+  /* Radius Architecture */
+  --radius-control: 8px;            /* Buttons, inputs, tabs, form elements */
+  --radius-card: 12px;              /* ERP cards, charts, data panels */
+  --radius-modal: 14px;             /* Modals and drawer panels */
+  --radius-pill: 9999px;            /* Status pills & chips */
+
+  /* Layout Dimensions */
+  --sidebar-width: 260px;
+  --sidebar-condensed-width: 72px;
+  --header-height: 64px;
+
+  /* Typography */
+  --font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+  /* Transitions */
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-smooth: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+}
