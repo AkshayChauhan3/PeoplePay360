@@ -9,6 +9,7 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Integer,
     Numeric,
     String,
     Text,
@@ -129,6 +130,13 @@ class Contract(Base):
         server_default=text("now()"),
     )
 
+    salary_structure_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("salary_structures.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
     # ------------------------------------------------------------------
     # Relationships
     # ------------------------------------------------------------------
@@ -136,6 +144,11 @@ class Contract(Base):
         "Employee",
         foreign_keys=[employee_id],
         lazy="joined",
+    )
+
+    salary_structure: Mapped["SalaryStructure | None"] = relationship(  # noqa: F821
+        "SalaryStructure",
+        back_populates="contracts",
     )
 
     schedule: Mapped["Schedule"] = relationship(  # noqa: F821

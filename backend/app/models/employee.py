@@ -122,6 +122,18 @@ class Employee(Base):
         nullable=False,
     )
 
+    job_position_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("job_positions.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    job_position: Mapped["JobPosition | None"] = relationship(
+        "JobPosition",
+        back_populates="employees",
+    )
+
     employee_type: Mapped[EmployeeType] = mapped_column(
         Enum(EmployeeType, name="employee_type", create_type=True),
         nullable=False,
