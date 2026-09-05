@@ -46,16 +46,18 @@ const MonthlyOverviewView = () => (
         { label: 'Peak Month', value: 'Oct', sub: '92% attendance' },
         { label: 'Lowest Month', value: 'Dec', sub: '84% attendance' },
       ].map((kpi, i) => (
-        <div key={i} style={{ background: 'white', border: '1px solid var(--border-structural)', borderRadius: '10px', padding: '1.25rem' }}>
-          <div className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: 'var(--text-secondary)' }}>{kpi.label}</div>
-          <div style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--primary)', lineHeight: 1 }}>{kpi.value}</div>
-          <div className="text-xs mt-1" style={{ color: 'var(--text-secondary)' }}>{kpi.sub}</div>
+        <div key={i} className="kpi-card">
+          <div className="kpi-title">{kpi.label}</div>
+          <div className="kpi-value-row">
+            <span className="kpi-value tabular-nums">{kpi.value}</span>
+          </div>
+          <div className="kpi-subtext">{kpi.sub}</div>
         </div>
       ))}
     </div>
 
     {/* Bar Chart */}
-    <div style={{ background: 'white', border: '1px solid var(--border-structural)', borderRadius: '10px', padding: '1.5rem', marginBottom: '1.5rem' }}>
+    <div className="card-panel mb-6">
       <div className="font-bold text-sm mb-4" style={{ color: 'var(--primary)' }}>Monthly Attendance Rate (%)</div>
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: '0.5rem', height: '160px' }}>
         {monthlyData.map((m, i) => (
@@ -69,7 +71,7 @@ const MonthlyOverviewView = () => (
     </div>
 
     {/* Department Breakdown */}
-    <div style={{ background: 'white', border: '1px solid var(--border-structural)', borderRadius: '10px', padding: '1.5rem' }}>
+    <div className="card-panel">
       <div className="font-bold text-sm mb-4" style={{ color: 'var(--primary)' }}>Department Attendance Rate</div>
       <div className="flex flex-col gap-3">
         {deptAttendance.sort((a, b) => b.rate - a.rate).map((dept, i) => (

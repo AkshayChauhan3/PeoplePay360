@@ -126,7 +126,7 @@ const TimeOffRequestsView = () => {
         ))}
       </div>
 
-      <div style={{ background: 'white', border: '1px solid var(--border-structural)', borderRadius: '10px', overflow: 'hidden' }}>
+      <div className="card-panel" style={{ padding: 0, overflow: 'hidden' }}>
         <table className="data-table">
           <thead>
             <tr>

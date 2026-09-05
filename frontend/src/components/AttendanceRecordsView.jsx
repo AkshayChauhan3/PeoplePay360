@@ -90,10 +90,12 @@ const AttendanceRecordsView = () => {
           { label: 'Late Check-ins', value: '18', sub: 'Within 30-min window', color: '#b45309' },
           { label: 'Absent', value: '22', sub: 'Unaccounted today', color: 'var(--critical)' },
         ].map((kpi, i) => (
-          <div key={i} style={{ background: 'white', border: '1px solid var(--border-structural)', borderRadius: '10px', padding: '1.25rem' }}>
-            <div className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: 'var(--text-secondary)' }}>{kpi.label}</div>
-            <div style={{ fontSize: '1.75rem', fontWeight: 800, color: kpi.color, lineHeight: 1 }}>{kpi.value}</div>
-            <div className="text-xs mt-1" style={{ color: 'var(--text-secondary)' }}>{kpi.sub}</div>
+          <div key={i} className="kpi-card">
+            <div className="kpi-title">{kpi.label}</div>
+            <div className="kpi-value-row">
+              <span className="kpi-value tabular-nums" style={{ color: kpi.color }}>{kpi.value}</span>
+            </div>
+            <div className="kpi-subtext">{kpi.sub}</div>
           </div>
         ))}
       </div>
@@ -101,14 +103,14 @@ const AttendanceRecordsView = () => {
       {/* Filter Pills */}
       <div className="flex items-center gap-2 mb-4">
         {['All', 'On Time', 'Late In', 'Remote', 'Leave'].map(s => (
-          <button key={s} onClick={() => setFilter(s)} style={{ padding: '0.35rem 0.75rem', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', border: '1px solid', transition: 'all 0.2s', background: filter === s ? 'var(--primary)' : 'white', color: filter === s ? 'white' : 'var(--text-secondary)', borderColor: filter === s ? 'var(--primary)' : 'var(--border-structural)' }}>
+          <button key={s} onClick={() => setFilter(s)} style={{ padding: '0.35rem 0.75rem', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', border: '1px solid', transition: 'all 0.2s', background: filter === s ? 'var(--primary)' : 'rgba(255, 255, 255, 0.8)', color: filter === s ? 'white' : 'var(--text-secondary)', borderColor: filter === s ? 'var(--primary)' : 'var(--border-structural)' }}>
             {s}
           </button>
         ))}
         <div className="ml-auto text-xs" style={{ color: 'var(--text-secondary)' }}>Showing records for <span className="font-semibold text-primary">Live Today</span></div>
       </div>
 
-      <div style={{ background: 'white', border: '1px solid var(--border-structural)', borderRadius: '10px', overflow: 'hidden' }}>
+      <div className="card-panel" style={{ padding: 0, overflow: 'hidden' }}>
         <table className="data-table">
           <thead>
             <tr>

@@ -95,10 +95,12 @@ const DepartmentsView = ({ onNavigate }) => {
           { label: 'Open Roles', value: totalOpenRoles, sub: 'Currently hiring' },
           { label: 'Avg Team Size', value: (totalHeadcount / (departments.length || 1)).toFixed(1), sub: 'Per department' },
         ].map((kpi, i) => (
-          <div key={i} style={{ background: 'white', border: '1px solid var(--border-structural)', borderRadius: '10px', padding: '1.25rem' }}>
-            <div className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>{kpi.label}</div>
-            <div style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--primary)', lineHeight: 1 }}>{kpi.value}</div>
-            <div className="text-xs mt-1" style={{ color: 'var(--text-secondary)' }}>{kpi.sub}</div>
+          <div key={i} className="kpi-card">
+            <div className="kpi-title">{kpi.label}</div>
+            <div className="kpi-value-row">
+              <span className="kpi-value tabular-nums">{kpi.value}</span>
+            </div>
+            <div className="kpi-subtext">{kpi.sub}</div>
           </div>
         ))}
       </div>
@@ -114,10 +116,7 @@ const DepartmentsView = ({ onNavigate }) => {
       {/* Department Cards */}
       <div className="grid grid-cols-2 gap-4">
         {filtered.map(dept => (
-          <div key={dept.id} style={{ background: 'white', border: '1px solid var(--border-structural)', borderRadius: '10px', padding: '1.5rem', cursor: 'pointer', transition: 'box-shadow 0.2s' }}
-            onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 16px rgba(36,28,36,0.08)'}
-            onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}
-          >
+          <div key={dept.id} className="card-panel" style={{ cursor: 'pointer' }}>
             <div className="flex items-start justify-between mb-3">
               <div>
                 <div style={{ display: 'inline-block', background: dept.color, color: dept.textColor, fontSize: '0.65rem', fontWeight: 700, padding: '0.2rem 0.5rem', borderRadius: '4px', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.5rem' }}>{dept.id}</div>

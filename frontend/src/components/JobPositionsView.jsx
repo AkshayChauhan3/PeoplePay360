@@ -52,9 +52,11 @@ const JobPositionsView = () => {
           { label: 'Filled Headcount', value: '32' },
           { label: 'Avg. Salary Range', value: '₹24 LPA' },
         ].map((kpi, i) => (
-          <div key={i} style={{ background: 'white', border: '1px solid var(--border-structural)', borderRadius: '10px', padding: '1.25rem' }}>
-            <div className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: 'var(--text-secondary)' }}>{kpi.label}</div>
-            <div style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--primary)' }}>{kpi.value}</div>
+          <div key={i} className="kpi-card">
+            <div className="kpi-title">{kpi.label}</div>
+            <div className="kpi-value-row">
+              <span className="kpi-value tabular-nums">{kpi.value}</span>
+            </div>
           </div>
         ))}
       </div>
@@ -66,7 +68,7 @@ const JobPositionsView = () => {
         </div>
       </div>
 
-      <div style={{ background: 'white', border: '1px solid var(--border-structural)', borderRadius: '10px', overflow: 'hidden' }}>
+      <div className="card-panel" style={{ padding: 0, overflow: 'hidden' }}>
         <table className="data-table">
           <thead>
             <tr>

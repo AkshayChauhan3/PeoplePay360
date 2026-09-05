@@ -18,13 +18,13 @@ const TimeOffTypesView = () => (
         <h2 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--primary)', margin: 0 }}>Time Off Types</h2>
         <p className="mt-1 text-sm" style={{ color: 'var(--text-secondary)' }}>Configure leave policies and entitlement rules.</p>
       </div>
-      <button style={{ background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '6px', padding: '0 1rem', height: '38px', fontWeight: 600, fontSize: '0.875rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+      <button className="btn-primary">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         Add Leave Type
       </button>
     </div>
 
-    <div style={{ background: 'white', border: '1px solid var(--border-structural)', borderRadius: '10px', overflow: 'hidden' }}>
+    <div className="card-panel" style={{ padding: 0, overflow: 'hidden' }}>
       <table className="data-table">
         <thead>
           <tr>
