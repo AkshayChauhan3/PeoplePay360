@@ -1,5 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -33,7 +34,7 @@ class PayrunPreviewRequest(BaseModel):
 class EligibleEmployeeItem(BaseModel):
     """Eligible employee item discovered by the payroll wizard."""
 
-    employee_id: int
+    employee_id: UUID | int | str
     employee_name: str
     employee_code: str
     contract_id: int
@@ -45,7 +46,7 @@ class EligibleEmployeeItem(BaseModel):
 class IneligibleEmployeeItem(BaseModel):
     """Ineligible employee item with explicit reason code/explanation."""
 
-    employee_id: int
+    employee_id: UUID | int | str
     employee_name: str
     employee_code: str
     reason: str
@@ -57,7 +58,7 @@ class PayrollWarningItem(BaseModel):
     type: str = Field(..., description="'BLOCKING' or 'WARNING'")
     code: str = Field(..., description="Machine-readable code, e.g. 'DUPLICATE_PAYSLIP'")
     message: str = Field(..., description="Human-readable description")
-    employee_id: int | None = None
+    employee_id: UUID | int | str | None = None
     employee_name: str | None = None
 
 
@@ -82,7 +83,7 @@ class PayrunCreate(BaseModel):
     salary_structure_id: int = Field(..., description="Salary Structure template ID")
     period_start: date = Field(..., description="Start date of payroll period")
     period_end: date = Field(..., description="End date of payroll period")
-    employee_ids: list[int] | None = Field(
+    employee_ids: list[UUID | int | str] | None = Field(
         default=None,
         description="Explicit subset of employee IDs to include. If omitted or empty, all eligible employees are included.",
     )

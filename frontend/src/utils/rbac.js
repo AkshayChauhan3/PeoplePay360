@@ -38,7 +38,7 @@ export const ROLE_PERMISSIONS = {
       'attendance_records', 'monthly_overview',
       'time_off_requests', 'leave_allocations', 'time_off_types',
       'payruns', 'payslips', 'salary_structures', 'salary_rules',
-      'reports', 'settings',
+      'settings',
     ],
   },
   HR_MANAGER: {
@@ -55,7 +55,6 @@ export const ROLE_PERMISSIONS = {
       'all_contracts', 'active_contracts', 'contract_detail',
       'attendance_records', 'monthly_overview',
       'time_off_requests', 'leave_allocations', 'time_off_types',
-      'reports',
     ],
   },
   HR_PAYROLL_MANAGER: {
@@ -72,7 +71,6 @@ export const ROLE_PERMISSIONS = {
       'all_contracts', 'active_contracts', 'contract_detail',
       'attendance_records', 'monthly_overview',
       'payruns', 'payslips', 'salary_structures', 'salary_rules',
-      'reports',
     ],
   },
   HR_PAYROLL_USER: {
@@ -89,7 +87,6 @@ export const ROLE_PERMISSIONS = {
       'all_contracts',
       'attendance_records',
       'payruns', 'payslips', 'salary_structures',
-      'reports',
     ],
   },
   EMPLOYEE: {

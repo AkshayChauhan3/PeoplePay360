@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Any
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
@@ -10,7 +11,7 @@ class UserCreate(BaseModel):
         default=None,
         description="Role ID referencing the roles table (defaults to 1 / EMPLOYEE if omitted)",
     )
-    employee_id: int | None = Field(
+    employee_id: UUID | int | str | None = Field(
         default=None,
         description="Optional 1:1 link to an existing employee record",
     )

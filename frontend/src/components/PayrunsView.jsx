@@ -7,9 +7,6 @@ const statusStyle = {
   VALIDATED: { bg: '#fff7ed', text: '#b45309' },
   DRAFT: { bg: '#f7fafa', text: '#49636a' },
   CANCELLED: { bg: '#fef2f2', text: '#b91c1c' },
-  Completed: { bg: '#eaf5ef', text: '#0b7a42' },
-  'In Progress': { bg: '#fff7ed', text: '#b45309' },
-  Draft: { bg: '#f7fafa', text: '#49636a' },
 };
 
 const normalizePayrun = (pr, idx) => {
@@ -47,22 +44,46 @@ const formatCurrencyShort = (amount) => {
 
 const PayrunsView = ({ onNavigate }) => {
   const [payruns, setPayruns] = useState([]);
+  const [structures, setStructures] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [actionMessage, setActionMessage] = useState({ type: '', text: '' });
   const [showModal, setShowModal] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [processingId, setProcessingId] = useState(null);
+
   const [newPeriod, setNewPeriod] = useState({ 
     name: 'October 2026 Monthly Payroll Batch', 
+    structure_id: '',
     start: '2026-10-01', 
     end: '2026-10-31' 
   });
+
+  const showToast = (type, text) => {
+    setActionMessage({ type, text });
+    setTimeout(() => setActionMessage({ type: '', text: '' }), 4000);
+  };
 
   const fetchPayruns = async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await apiService.getPayruns();
-      const raw = data?.items || data?.data || (Array.isArray(data) ? data : []);
-      setPayruns(raw.map(normalizePayrun));
+      const [payrunsRes, structsRes] = await Promise.allSettled([
+        apiService.getPayruns(),
+        apiService.getSalaryStructures(),
+      ]);
+
+      if (payrunsRes.status === 'fulfilled') {
+        const raw = payrunsRes.value?.items || (Array.isArray(payrunsRes.value) ? payrunsRes.value : []);
+        setPayruns(raw.map(normalizePayrun));
+      }
+      if (structsRes.status === 'fulfilled') {
+        const structList = structsRes.value?.items || (Array.isArray(structsRes.value) ? structsRes.value : []);
+        setStructures(structList);
+        if (structList.length > 0 && !newPeriod.structure_id) {
+          setNewPeriod(prev => ({ ...prev, structure_id: structList[0].id }));
+        }
+      }
     } catch (err) {
       console.error('Failed to fetch payruns:', err);
       setError(err.message || 'Unable to load payruns.');
@@ -78,28 +99,120 @@ const PayrunsView = ({ onNavigate }) => {
 
   const handleCreate = async (e) => {
     e.preventDefault();
+    setSubmitting(true);
     try {
-      const created = await apiService.createPayrun({
+      const structId = Number(newPeriod.structure_id) || (structures[0]?.id || 1);
+      await apiService.createPayrun({
         name: newPeriod.name,
-        salary_structure_id: 1,
+        salary_structure_id: structId,
         period_start: newPeriod.start,
         period_end: newPeriod.end,
       });
-      setPayruns(prev => [normalizePayrun(created, prev.length), ...prev]);
+      showToast('success', 'Payroll batch initialized successfully in DRAFT state.');
       setShowModal(false);
+      await fetchPayruns();
     } catch (err) {
       console.error('Failed to create payrun:', err);
+      showToast('error', `Failed to create payrun: ${err.message}`);
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const handleCompute = async (id) => {
+    setProcessingId(id);
     try {
       await apiService.computePayrun(id);
+      showToast('success', `Payrun batch PR-${id} computed successfully!`);
       await fetchPayruns();
     } catch (err) {
-      console.warn('Payrun compute status:', err);
-      setPayruns(prev => prev.map(p => p.rawId === id ? { ...p, status: 'COMPUTED' } : p));
+      console.error('Payrun compute error:', err);
+      showToast('error', `Computation failed: ${err.message}`);
+    } finally {
+      setProcessingId(null);
     }
+  };
+
+  const handleValidate = async (id) => {
+    setProcessingId(id);
+    try {
+      await apiService.validatePayrun(id);
+      showToast('success', `Payrun batch PR-${id} validated and verified!`);
+      await fetchPayruns();
+    } catch (err) {
+      console.error('Payrun validate error:', err);
+      showToast('error', `Validation failed: ${err.message}`);
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleMarkPaid = async (id) => {
+    if (!window.confirm('Mark this payrun as PAID and freeze all payslip salary lines?')) return;
+    setProcessingId(id);
+    try {
+      await apiService.markPayrunPaid(id);
+      showToast('success', `Payrun batch PR-${id} successfully marked as PAID!`);
+      await fetchPayruns();
+    } catch (err) {
+      console.error('Payrun mark-paid error:', err);
+      showToast('error', `Failed to close payrun: ${err.message}`);
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleCancel = async (id) => {
+    if (!window.confirm('Cancel this payrun batch?')) return;
+    setProcessingId(id);
+    try {
+      await apiService.cancelPayrun(id);
+      showToast('success', `Payrun batch PR-${id} cancelled.`);
+      await fetchPayruns();
+    } catch (err) {
+      console.error('Payrun cancel error:', err);
+      showToast('error', `Cancel failed: ${err.message}`);
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('Permanently delete this draft payrun batch?')) return;
+    setProcessingId(id);
+    try {
+      await apiService.deletePayrun(id);
+      showToast('success', `Payrun batch PR-${id} deleted.`);
+      await fetchPayruns();
+    } catch (err) {
+      console.error('Payrun delete error:', err);
+      showToast('error', `Delete failed: ${err.message}`);
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const handleExportCSV = () => {
+    if (payruns.length === 0) return;
+    const headers = ['Payrun ID', 'Period', 'Slips Count', 'Gross Pay', 'Deductions', 'Net Pay', 'End Date', 'Status'];
+    const rows = payruns.map(p => [
+      p.id,
+      p.period,
+      p.employees,
+      p.rawGross,
+      p.rawDeductions,
+      p.rawNet,
+      p.date,
+      p.status,
+    ]);
+    const csvContent = [headers, ...rows].map(e => e.map(val => `"${val}"`).join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `payruns_register_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   // Dynamic KPI computations from live payruns
@@ -121,15 +234,40 @@ const PayrunsView = ({ onNavigate }) => {
           <p className="mt-1 text-sm" style={{ color: 'var(--text-secondary)' }}>Process and manage monthly payroll cycles with statutory audit compliance.</p>
         </div>
         <div className="flex items-center gap-2">
-          <button className="btn-secondary" onClick={() => window.print()}>Export Register</button>
+          <button className="btn-secondary" onClick={handleExportCSV}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px' }}>
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Export Register
+          </button>
           <button 
             onClick={() => setShowModal(true)}
-            style={{ background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '6px', padding: '0 1rem', height: '38px', fontWeight: 600, fontSize: '0.875rem', cursor: 'pointer' }}
+            style={{ background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '6px', padding: '0 1rem', height: '38px', fontWeight: 600, fontSize: '0.875rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
           >
-            + New Payrun
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            New Payrun
           </button>
         </div>
       </div>
+
+      {actionMessage.text && (
+        <div style={{
+          padding: '12px 16px',
+          borderRadius: '8px',
+          marginBottom: '16px',
+          fontSize: '13px',
+          fontWeight: 600,
+          background: actionMessage.type === 'success' ? '#ecfdf5' : '#fef2f2',
+          border: `1px solid ${actionMessage.type === 'success' ? '#10b981' : '#f87171'}`,
+          color: actionMessage.type === 'success' ? '#065f46' : '#991b1b',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
+        }}>
+          <span>{actionMessage.type === 'success' ? '✓' : '⚠️'}</span>
+          <span>{actionMessage.text}</span>
+        </div>
+      )}
 
       <div className="grid grid-cols-4 gap-4 mb-6">
         <div className="kpi-card">
@@ -207,6 +345,8 @@ const PayrunsView = ({ onNavigate }) => {
             ) : (
               payruns.map(pr => {
                 const ss = statusStyle[pr.status] || { bg: '#f7fafa', text: '#49636a' };
+                const isProcessing = processingId === pr.rawId;
+
                 return (
                   <tr key={pr.id} onMouseEnter={e => e.currentTarget.style.background = '#f7fafa'} onMouseLeave={e => e.currentTarget.style.background = 'white'}>
                     <td><span style={{ fontFamily: 'monospace', fontSize: '0.75rem', background: '#f7fafa', padding: '0.2rem 0.4rem', borderRadius: '4px', fontWeight: 700 }}>{pr.id}</span></td>
@@ -218,21 +358,78 @@ const PayrunsView = ({ onNavigate }) => {
                     <td className="text-xs" style={{ color: 'var(--text-secondary)' }}>{pr.date}</td>
                     <td><span style={{ background: ss.bg, color: ss.text, fontSize: '0.7rem', fontWeight: 700, padding: '0.2rem 0.5rem', borderRadius: '4px' }}>{pr.status}</span></td>
                     <td>
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 items-center flex-wrap">
+                        {/* 1. DRAFT Actions: Compute or Delete */}
+                        {pr.status === 'DRAFT' && (
+                          <>
+                            <button 
+                              onClick={() => handleCompute(pr.rawId)}
+                              disabled={isProcessing}
+                              style={{ fontSize: '0.72rem', fontWeight: 700, color: 'white', background: 'var(--primary)', border: 'none', borderRadius: '4px', padding: '0.25rem 0.6rem', cursor: isProcessing ? 'not-allowed' : 'pointer' }}
+                              title="Calculate payroll lines from attendance and contracts"
+                            >
+                              {isProcessing ? 'Computing…' : 'Compute'}
+                            </button>
+                            <button 
+                              onClick={() => handleDelete(pr.rawId)}
+                              disabled={isProcessing}
+                              style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--critical)', background: '#fff2f2', border: '1px solid #fecaca', borderRadius: '4px', padding: '0.25rem 0.5rem', cursor: isProcessing ? 'not-allowed' : 'pointer' }}
+                              title="Delete this draft payrun batch"
+                            >
+                              Delete
+                            </button>
+                          </>
+                        )}
+
+                        {/* 2. COMPUTED Actions: Validate or Cancel */}
+                        {pr.status === 'COMPUTED' && (
+                          <>
+                            <button 
+                              onClick={() => handleValidate(pr.rawId)}
+                              disabled={isProcessing}
+                              style={{ fontSize: '0.72rem', fontWeight: 700, color: 'white', background: '#0284c7', border: 'none', borderRadius: '4px', padding: '0.25rem 0.6rem', cursor: isProcessing ? 'not-allowed' : 'pointer' }}
+                              title="Audit and validate computed payslips"
+                            >
+                              {isProcessing ? 'Validating…' : 'Validate'}
+                            </button>
+                            <button 
+                              onClick={() => handleCancel(pr.rawId)}
+                              disabled={isProcessing}
+                              style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--critical)', background: '#fff2f2', border: '1px solid #fecaca', borderRadius: '4px', padding: '0.25rem 0.5rem', cursor: isProcessing ? 'not-allowed' : 'pointer' }}
+                            >
+                              Cancel
+                            </button>
+                          </>
+                        )}
+
+                        {/* 3. VALIDATED Actions: Mark Paid or Cancel */}
+                        {pr.status === 'VALIDATED' && (
+                          <>
+                            <button 
+                              onClick={() => handleMarkPaid(pr.rawId)}
+                              disabled={isProcessing}
+                              style={{ fontSize: '0.72rem', fontWeight: 700, color: 'white', background: 'var(--success, #0b7a42)', border: 'none', borderRadius: '4px', padding: '0.25rem 0.6rem', cursor: isProcessing ? 'not-allowed' : 'pointer' }}
+                              title="Finalize settlement and mark as paid"
+                            >
+                              {isProcessing ? 'Settling…' : 'Mark Paid'}
+                            </button>
+                            <button 
+                              onClick={() => handleCancel(pr.rawId)}
+                              disabled={isProcessing}
+                              style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--critical)', background: '#fff2f2', border: '1px solid #fecaca', borderRadius: '4px', padding: '0.25rem 0.5rem', cursor: isProcessing ? 'not-allowed' : 'pointer' }}
+                            >
+                              Cancel
+                            </button>
+                          </>
+                        )}
+
+                        {/* Payslips drill-down */}
                         <button 
                           onClick={() => onNavigate && onNavigate('payslips')}
-                          style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--secondary)', background: 'none', border: '1px solid var(--border-structural)', borderRadius: '4px', padding: '0.2rem 0.5rem', cursor: 'pointer' }}
+                          style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--secondary)', background: 'none', border: '1px solid var(--border-structural)', borderRadius: '4px', padding: '0.25rem 0.5rem', cursor: 'pointer' }}
                         >
                           Payslips →
                         </button>
-                        {pr.status === 'DRAFT' && (
-                          <button 
-                            onClick={() => handleCompute(pr.rawId)}
-                            style={{ fontSize: '0.7rem', fontWeight: 600, color: 'white', background: 'var(--primary)', border: 'none', borderRadius: '4px', padding: '0.2rem 0.5rem', cursor: 'pointer' }}
-                          >
-                            Compute
-                          </button>
-                        )}
                       </div>
                     </td>
                   </tr>
@@ -245,48 +442,74 @@ const PayrunsView = ({ onNavigate }) => {
 
       {/* New Payrun Modal */}
       {showModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div style={{ background: '#fff', borderRadius: '12px', width: '450px', padding: '24px' }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '16px' }}>
+          <div style={{ background: '#fff', borderRadius: '12px', width: '460px', maxWidth: '100%', padding: '24px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: 'var(--primary)' }}>Initialize New Payrun Cycle</h3>
-              <button onClick={() => setShowModal(false)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '18px' }}>✕</button>
+              <button onClick={() => setShowModal(false)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '18px', color: 'var(--text-secondary)' }}>✕</button>
             </div>
             <form onSubmit={handleCreate} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Cycle Name / Period</label>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Cycle Name / Period *</label>
                 <input 
                   type="text" 
                   required 
                   className="form-input" 
                   value={newPeriod.name} 
                   onChange={e => setNewPeriod({ ...newPeriod, name: e.target.value })} 
+                  style={{ width: '100%' }}
                 />
               </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Salary Structure Template *</label>
+                <select 
+                  className="control-select" 
+                  style={{ width: '100%', height: '38px' }}
+                  value={newPeriod.structure_id} 
+                  onChange={e => setNewPeriod({ ...newPeriod, structure_id: e.target.value })}
+                >
+                  {structures.map(s => (
+                    <option key={s.id} value={s.id}>{s.name} ({s.code || `SS-${s.id}`})</option>
+                  ))}
+                  {structures.length === 0 && (
+                    <option value="1">Standard Full-Time Tech Structure</option>
+                  )}
+                </select>
+              </div>
+
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Start Date</label>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Start Date *</label>
                   <input 
                     type="date" 
                     required 
                     className="form-input" 
                     value={newPeriod.start} 
                     onChange={e => setNewPeriod({ ...newPeriod, start: e.target.value })} 
+                    style={{ width: '100%' }}
                   />
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>End Date</label>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>End Date *</label>
                   <input 
                     type="date" 
                     required 
                     className="form-input" 
                     value={newPeriod.end} 
                     onChange={e => setNewPeriod({ ...newPeriod, end: e.target.value })} 
+                    style={{ width: '100%' }}
                   />
                 </div>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '12px' }}>
-                <button type="button" className="btn-secondary" onClick={() => setShowModal(false)}>Cancel</button>
-                <button type="submit" className="btn-primary">Create Payrun</button>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '12px', borderTop: '1px solid var(--border-structural)', paddingTop: '12px' }}>
+                <button type="button" className="btn-secondary" onClick={() => setShowModal(false)} disabled={submitting}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn-primary" disabled={submitting} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  {submitting ? 'Initializing Batch…' : 'Create Payrun'}
+                </button>
               </div>
             </form>
           </div>

@@ -47,25 +47,72 @@ const PayslipsView = () => {
   const [error, setError] = useState(null);
   const [monthFilter, setMonthFilter] = useState('ALL');
   const [selectedSlip, setSelectedSlip] = useState(null);
+  const [downloadingId, setDownloadingId] = useState(null);
+  const [toastMsg, setToastMsg] = useState('');
+
+  const showToast = (msg) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(''), 4000);
+  };
+
+  const fetchPayslips = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await apiService.getPayslips();
+      const items = data?.items || (Array.isArray(data) ? data : []);
+      setPayslips(items.map(normalizePayslip));
+    } catch (err) {
+      console.error('Failed to fetch payslips:', err);
+      setError(err.message || 'Unable to load payslips.');
+      setPayslips([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchPayslips = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const data = await apiService.getPayslips();
-        const items = data?.items || (Array.isArray(data) ? data : []);
-        setPayslips(items.map(normalizePayslip));
-      } catch (err) {
-        console.error('Failed to fetch payslips:', err);
-        setError(err.message || 'Unable to load payslips.');
-        setPayslips([]);
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchPayslips();
   }, []);
+
+  const handleDownloadPdf = async (slip) => {
+    if (!slip?.rawId) return;
+    setDownloadingId(slip.rawId);
+    try {
+      const safeName = `${slip.name.replace(/[^a-zA-Z0-9]/g, '_')}_${slip.month.replace(/\s+/g, '_')}.pdf`;
+      await apiService.downloadPayslipPdf(slip.rawId, safeName);
+      showToast(`Payslip PDF for ${slip.name} downloaded successfully!`);
+    } catch (err) {
+      console.error('Download PDF error:', err);
+      showToast(`Failed to download PDF: ${err.message}`);
+    } finally {
+      setDownloadingId(null);
+    }
+  };
+
+  const handleExportStatement = () => {
+    if (filteredPayslips.length === 0) return;
+    const headers = ['Payslip ID', 'Employee', 'Employee Code', 'Department', 'Cycle Period', 'Gross Amount', 'Deductions', 'Net Disbursed', 'Status'];
+    const rows = filteredPayslips.map(ps => [
+      ps.id,
+      ps.name,
+      ps.empId,
+      ps.dept,
+      ps.month,
+      ps.grossNum,
+      ps.dedNum,
+      ps.netNum,
+      ps.status,
+    ]);
+    const csvContent = [headers, ...rows].map(e => e.map(val => `"${val}"`).join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `payslips_statement_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
 
   const uniqueMonths = Array.from(new Set(payslips.map(p => p.month))).filter(Boolean);
   const filteredPayslips = monthFilter === 'ALL' 
@@ -90,9 +137,33 @@ const PayslipsView = () => {
               <option key={m} value={m}>{m}</option>
             ))}
           </select>
-          <button className="btn-secondary" onClick={() => window.print()}>Export Statement</button>
+          <button className="btn-secondary" onClick={handleExportStatement}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: '6px' }}>
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Export Statement
+          </button>
         </div>
       </div>
+
+      {toastMsg && (
+        <div style={{
+          padding: '10px 16px',
+          borderRadius: '8px',
+          marginBottom: '16px',
+          fontSize: '13px',
+          fontWeight: 600,
+          background: '#ecfdf5',
+          border: '1px solid #10b981',
+          color: '#065f46',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
+        }}>
+          <span>✓</span>
+          <span>{toastMsg}</span>
+        </div>
+      )}
 
       <div className="grid grid-cols-3 gap-4 mb-6">
         {[
@@ -151,6 +222,8 @@ const PayslipsView = () => {
             ) : (
               filteredPayslips.map(ps => {
                 const ss = statusStyle[ps.rawStatus] || statusStyle[ps.status] || { bg: '#f3f4f6', text: '#4b5563' };
+                const isDownloading = downloadingId === ps.rawId;
+
                 return (
                   <tr key={ps.id} onMouseEnter={e => e.currentTarget.style.background = '#f7fafa'} onMouseLeave={e => e.currentTarget.style.background = 'white'}>
                     <td>
@@ -174,7 +247,15 @@ const PayslipsView = () => {
                           onClick={() => setSelectedSlip(ps)}
                           style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--secondary)', background: 'none', border: '1px solid var(--border-structural)', borderRadius: '4px', padding: '0.2rem 0.5rem', cursor: 'pointer' }}
                         >
-                          View Breakdown
+                          Breakdown
+                        </button>
+                        <button 
+                          onClick={() => handleDownloadPdf(ps)}
+                          disabled={isDownloading}
+                          style={{ fontSize: '0.7rem', fontWeight: 700, color: 'white', background: 'var(--primary)', border: 'none', borderRadius: '4px', padding: '0.2rem 0.6rem', cursor: isDownloading ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                          title="Stream official ReportLab PDF from FastAPI backend"
+                        >
+                          {isDownloading ? '…' : '📄 PDF'}
                         </button>
                       </div>
                     </td>
@@ -188,14 +269,14 @@ const PayslipsView = () => {
 
       {/* Payslip Modal */}
       {selectedSlip && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div style={{ background: '#fff', borderRadius: '12px', width: '500px', padding: '24px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '16px' }}>
+          <div style={{ background: '#fff', borderRadius: '12px', width: '520px', maxWidth: '100%', padding: '24px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid var(--border-structural)', paddingBottom: '12px' }}>
               <div>
                 <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: 'var(--primary)' }}>{selectedSlip.name}</h3>
                 <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{selectedSlip.empId} • {selectedSlip.dept} • {selectedSlip.month}</div>
               </div>
-              <button onClick={() => setSelectedSlip(null)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '18px' }}>✕</button>
+              <button onClick={() => setSelectedSlip(null)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '18px', color: 'var(--text-secondary)' }}>✕</button>
             </div>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px' }}>
@@ -233,7 +314,17 @@ const PayslipsView = () => {
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
               <button className="btn-secondary" onClick={() => setSelectedSlip(null)}>Close</button>
-              <button className="btn-primary" onClick={() => alert(`Downloading Payslip PDF for ${selectedSlip.name}`)}>Download Official PDF</button>
+              <button 
+                className="btn-primary" 
+                onClick={() => handleDownloadPdf(selectedSlip)}
+                disabled={downloadingId === selectedSlip.rawId}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                {downloadingId === selectedSlip.rawId ? 'Downloading…' : 'Download Official PDF'}
+              </button>
             </div>
           </div>
         </div>

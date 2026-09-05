@@ -1,6 +1,7 @@
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -13,7 +14,7 @@ from app.schemas.job_position import JobPositionResponse
 class ContractCreate(BaseModel):
     """Schema for creating a new employment contract."""
 
-    employee_id: int = Field(..., gt=0, description="ID of the employee")
+    employee_id: UUID | int | str = Field(..., description="ID of the employee")
     contract_number: str = Field(
         ...,
         min_length=2,
@@ -109,7 +110,7 @@ class ContractResponse(BaseModel):
 
     id: int
     contract_number: str
-    employee_id: int
+    employee_id: UUID | int | str
     department_id: int
     job_position_id: int
     salary_structure_id: int | None
@@ -121,9 +122,9 @@ class ContractResponse(BaseModel):
     updated_at: datetime
 
     # Nested snapshots
-    employee: EmployeeSummaryResponse
-    department: DepartmentResponse
-    job_position: JobPositionResponse
+    employee: EmployeeSummaryResponse | None = None
+    department: DepartmentResponse | None = None
+    job_position: JobPositionResponse | None = None
 
 
 class ContractListResponse(BaseModel):

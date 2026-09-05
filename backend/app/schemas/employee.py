@@ -1,5 +1,6 @@
 from datetime import date, datetime
 from typing import Any
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
@@ -13,7 +14,7 @@ class EmployeeSummaryResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
+    id: UUID | int | str
     employee_code: str
     first_name: str
     last_name: str
@@ -32,7 +33,7 @@ class EmployeeCreate(BaseModel):
     joining_date: date = Field(..., description="Date when the employee joined the company")
     department_id: int = Field(..., description="Referenced department ID")
     job_position_id: int = Field(..., description="Referenced job position ID")
-    manager_id: int | None = Field(default=None, description="Optional manager employee ID")
+    manager_id: UUID | int | str | None = Field(default=None, description="Optional manager employee ID")
     status: EmployeeStatus = Field(default=EmployeeStatus.ACTIVE, description="Initial employee status")
 
     @field_validator("manager_id", mode="before")
@@ -65,7 +66,7 @@ class EmployeeUpdate(BaseModel):
     joining_date: date | None = Field(default=None)
     department_id: int | None = Field(default=None)
     job_position_id: int | None = Field(default=None)
-    manager_id: int | None = Field(default=None)
+    manager_id: UUID | int | str | None = Field(default=None)
     status: EmployeeStatus | None = Field(default=None)
 
     @field_validator("employee_code")
@@ -84,7 +85,7 @@ class EmployeeResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
+    id: UUID | int | str
     employee_code: str
     first_name: str
     last_name: str
@@ -95,7 +96,7 @@ class EmployeeResponse(BaseModel):
     joining_date: date
     department_id: int
     job_position_id: int
-    manager_id: int | None
+    manager_id: UUID | int | str | None = None
     status: EmployeeStatus
 
     department: DepartmentResponse | None = None

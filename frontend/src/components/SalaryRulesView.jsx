@@ -16,7 +16,7 @@ const normalizeRule = (r, idx) => {
     compDesc = `${r.percentage}% of ${r.percentage_base || 'Wage'}`;
   } else if (compType === 'FORMULA') {
     compDesc = r.formula || 'Formula rule';
-  } else if (r.fixed_amount) {
+  } else if (r.fixed_amount !== null && r.fixed_amount !== undefined) {
     compDesc = `₹${Number(r.fixed_amount).toLocaleString('en-IN')} flat`;
   } else if (r.computation) {
     compDesc = r.computation;
@@ -28,10 +28,15 @@ const normalizeRule = (r, idx) => {
   return {
     id: r.code || `SR-${String(r.id || idx + 1).padStart(3, '0')}`,
     rawId: r.id,
+    structureId: r.salary_structure_id,
     name: r.name || 'Component Rule',
     category: isDeduction ? 'Deduction' : (category === 'GROSS' ? 'Gross Aggregator' : (category === 'NET' ? 'Net Disbursed' : 'Earnings')),
     rawCategory: category,
     computation: compDesc,
+    fixedAmount: r.fixed_amount,
+    percentage: r.percentage,
+    percentageBase: r.percentage_base,
+    formula: r.formula,
     taxable: r.taxable !== undefined ? r.taxable : !isDeduction,
     pfApplicable: r.pf_applicable !== undefined ? r.pf_applicable : (r.code === 'PF' || r.code === 'BASIC'),
     type: compType,
@@ -42,65 +47,279 @@ const normalizeRule = (r, idx) => {
 
 const SalaryRulesView = () => {
   const [rules, setRules] = useState([]);
+  const [structures, setStructures] = useState([]);
+  const [selectedStructureId, setSelectedStructureId] = useState('ALL');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showModal, setShowModal] = useState(false);
-  const [newRule, setNewRule] = useState({ name: '', category: 'Earnings', type: 'PERCENTAGE', computation: '40% of Wage', taxable: true, pfApplicable: false });
+  const [editRule, setEditRule] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [toastMsg, setToastMsg] = useState('');
 
-  useEffect(() => {
-    const fetchRules = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const data = await apiService.getSalaryRules();
+  const [formData, setFormData] = useState({
+    structureId: 1,
+    name: '',
+    code: '',
+    category: 'ALLOWANCE',
+    sequence: 10,
+    type: 'PERCENTAGE',
+    percentage: '40',
+    percentageBase: 'BASIC',
+    fixedAmount: '5000',
+    formula: 'BASIC * 0.4',
+    isActive: true,
+  });
+
+  const showToast = (msg) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(''), 3500);
+  };
+
+  const fetchInitialData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [rulesRes, structuresRes] = await Promise.allSettled([
+        apiService.getSalaryRules(),
+        apiService.getSalaryStructures(),
+      ]);
+
+      if (rulesRes.status === 'fulfilled') {
+        const data = rulesRes.value;
         const items = data?.items || (Array.isArray(data) ? data : []);
         setRules(items.map(normalizeRule));
-      } catch (err) {
-        console.error('Failed to fetch salary rules:', err);
-        setError(err.message || 'Unable to load salary rules.');
-        setRules([]);
-      } finally {
-        setLoading(false);
       }
-    };
-    fetchRules();
+
+      if (structuresRes.status === 'fulfilled') {
+        const sData = structuresRes.value;
+        const sList = sData?.items || (Array.isArray(sData) ? sData : []);
+        setStructures(sList);
+        if (sList.length > 0) {
+          setFormData(f => ({ ...f, structureId: sList[0].id }));
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch salary data:', err);
+      setError(err.message || 'Unable to load salary rules.');
+      setRules([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchInitialData();
   }, []);
 
-  const handleCreate = (e) => {
-    e.preventDefault();
-    setRules(prev => [normalizeRule({ ...newRule, id: `SR-00${prev.length + 1}` }, prev.length), ...prev]);
-    setShowModal(false);
-    setNewRule({ name: '', category: 'Earnings', type: 'Fixed', computation: '10% of Basic', taxable: true, pfApplicable: false });
+  const openNew = () => {
+    setEditRule(null);
+    setFormData({
+      structureId: structures[0]?.id || 1,
+      name: '',
+      code: '',
+      category: 'ALLOWANCE',
+      sequence: (rules.length + 1) * 10,
+      type: 'PERCENTAGE',
+      percentage: '40',
+      percentageBase: 'BASIC',
+      fixedAmount: '5000',
+      formula: 'BASIC * 0.4',
+      isActive: true,
+    });
+    setShowModal(true);
   };
+
+  const openEdit = (r) => {
+    setEditRule(r);
+    setFormData({
+      structureId: r.structureId || structures[0]?.id || 1,
+      name: r.name,
+      code: r.id,
+      category: r.rawCategory || 'ALLOWANCE',
+      sequence: r.sequence,
+      type: r.type,
+      percentage: r.percentage !== null && r.percentage !== undefined ? String(r.percentage) : '40',
+      percentageBase: r.percentageBase || 'BASIC',
+      fixedAmount: r.fixedAmount !== null && r.fixedAmount !== undefined ? String(r.fixedAmount) : '5000',
+      formula: r.formula || 'BASIC * 0.4',
+      isActive: r.isActive,
+    });
+    setShowModal(true);
+  };
+
+  const handleSave = async (e) => {
+    e.preventDefault();
+    setSubmitting(true);
+    try {
+      const codeClean = formData.code.trim().toUpperCase() || formData.name.trim().toUpperCase().replace(/[^A-Z0-9]/g, '_').slice(0, 10);
+      
+      let computationPayload = {};
+      if (formData.type === 'PERCENTAGE') {
+        computationPayload = {
+          percentage: Number(formData.percentage) || 0,
+          percentage_base: formData.percentageBase.trim().toUpperCase() || 'BASIC',
+          fixed_amount: null,
+          formula: null,
+        };
+      } else if (formData.type === 'FIXED') {
+        computationPayload = {
+          fixed_amount: Number(formData.fixedAmount) || 0,
+          percentage: null,
+          percentage_base: null,
+          formula: null,
+        };
+      } else if (formData.type === 'FORMULA') {
+        computationPayload = {
+          formula: formData.formula.trim(),
+          fixed_amount: null,
+          percentage: null,
+          percentage_base: null,
+        };
+      }
+
+      if (editRule && editRule.rawId) {
+        // Update rule
+        const updatePayload = {
+          name: formData.name.trim(),
+          code: codeClean,
+          category: formData.category,
+          sequence: Number(formData.sequence) || 10,
+          computation_type: formData.type,
+          ...computationPayload,
+          is_active: formData.isActive,
+        };
+        await apiService.updateSalaryRule(editRule.rawId, updatePayload);
+        showToast(`Rule ${codeClean} updated successfully!`);
+      } else {
+        // Create rule
+        const createPayload = {
+          salary_structure_id: Number(formData.structureId) || (structures[0]?.id || 1),
+          name: formData.name.trim(),
+          code: codeClean,
+          category: formData.category,
+          sequence: Number(formData.sequence) || 10,
+          computation_type: formData.type,
+          ...computationPayload,
+          is_active: formData.isActive,
+        };
+        await apiService.createSalaryRule(createPayload);
+        showToast(`Salary rule ${codeClean} created successfully!`);
+      }
+
+      setShowModal(false);
+      // Refresh list
+      const fresh = await apiService.getSalaryRules();
+      const freshItems = fresh?.items || (Array.isArray(fresh) ? fresh : []);
+      setRules(freshItems.map(normalizeRule));
+    } catch (err) {
+      console.error('Failed to save salary rule:', err);
+      alert(`Error saving rule: ${err.message || 'Validation failed'}`);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDelete = async (r) => {
+    if (!r.rawId) return;
+    if (!window.confirm(`Are you sure you want to delete salary rule "${r.name}" (${r.id})?`)) {
+      return;
+    }
+    try {
+      await apiService.deleteSalaryRule(r.rawId);
+      showToast(`Rule ${r.id} deleted successfully.`);
+      setRules(prev => prev.filter(item => item.rawId !== r.rawId));
+    } catch (err) {
+      console.error('Failed to delete salary rule:', err);
+      alert(`Failed to delete rule: ${err.message || 'Cannot delete rule with active dependencies.'}`);
+    }
+  };
+
+  const handleExportCSV = () => {
+    if (rules.length === 0) {
+      alert('No salary rules to export.');
+      return;
+    }
+    const headers = ['Rule ID', 'Rule Name', 'Category', 'Type', 'Computation', 'Sequence', 'Status'];
+    const rows = filteredRules.map(r => [
+      `"${r.id}"`,
+      `"${r.name}"`,
+      `"${r.category}"`,
+      `"${r.type}"`,
+      `"${r.computation.replace(/"/g, '""')}"`,
+      r.sequence,
+      r.isActive ? 'Active' : 'Inactive'
+    ]);
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `Salary_Rules_Export_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const filteredRules = selectedStructureId === 'ALL'
+    ? rules
+    : rules.filter(r => String(r.structureId) === String(selectedStructureId));
 
   return (
     <>
       <div className="dashboard-header-strip">
         <div className="dashboard-title">
-          <div className="text-xs font-semibold mb-1" style={{ color: 'var(--secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>PAYROLL</div>
+          <div className="text-xs font-semibold mb-1" style={{ color: 'var(--secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>PAYROLL • LIVE DATABASE</div>
           <h2 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--primary)', margin: 0 }}>Salary Rules</h2>
-          <p className="mt-1 text-sm" style={{ color: 'var(--text-secondary)' }}>Configure earnings, deductions, and computation logic.</p>
+          <p className="mt-1 text-sm" style={{ color: 'var(--text-secondary)' }}>Configure earnings, deductions, and computation logic across structures.</p>
         </div>
-        <button 
-          onClick={() => setShowModal(true)}
-          style={{ background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '6px', padding: '0 1rem', height: '38px', fontWeight: 600, fontSize: '0.875rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          New Rule
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {structures.length > 0 && (
+            <select
+              className="control-select"
+              style={{ height: '38px', borderRadius: '6px', fontSize: '0.85rem' }}
+              value={selectedStructureId}
+              onChange={e => setSelectedStructureId(e.target.value)}
+            >
+              <option value="ALL">All Salary Structures ({structures.length})</option>
+              {structures.map(s => (
+                <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
+              ))}
+            </select>
+          )}
+          <button 
+            onClick={handleExportCSV}
+            className="btn-secondary"
+            style={{ height: '38px', display: 'flex', alignItems: 'center', gap: '6px' }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Export CSV
+          </button>
+          <button 
+            onClick={openNew}
+            style={{ background: 'var(--primary)', color: 'white', border: 'none', borderRadius: '6px', padding: '0 1rem', height: '38px', fontWeight: 600, fontSize: '0.875rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontFamily: 'inherit' }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            New Rule
+          </button>
+        </div>
       </div>
+
+      {toastMsg && (
+        <div style={{ background: '#ecfdf5', border: '1px solid #10b981', color: '#065f46', padding: '10px 16px', borderRadius: '8px', marginBottom: '16px', fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span>✓</span> {toastMsg}
+        </div>
+      )}
 
       <div className="card-panel" style={{ padding: 0, overflow: 'hidden' }}>
         <table className="data-table">
           <thead>
             <tr>
+              <th>Sequence</th>
               <th>Rule ID</th>
               <th>Rule Name</th>
               <th>Category</th>
               <th>Type</th>
               <th>Computation</th>
-              <th>Taxable</th>
-              <th>PF Applicable</th>
+              <th>Status</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -114,7 +333,7 @@ const SalaryRulesView = () => {
                   </div>
                 </td>
               </tr>
-            ) : rules.length === 0 ? (
+            ) : filteredRules.length === 0 ? (
               <tr>
                 <td colSpan="8" style={{ textAlign: 'center', padding: '48px 16px', color: 'var(--text-secondary)' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
@@ -123,26 +342,44 @@ const SalaryRulesView = () => {
                     </svg>
                     <div style={{ fontWeight: 600, fontSize: '15px', color: 'var(--text-primary)' }}>No salary rules found</div>
                     <div style={{ fontSize: '13px', maxWidth: '360px' }}>
-                      No salary computation rules configured yet. Click "+ New Rule" above to create basic, HRA, allowance or deduction rules.
+                      No salary computation rules configured yet for this structure. Click "+ New Rule" above to create basic, HRA, allowance or deduction rules.
                     </div>
                   </div>
                 </td>
               </tr>
             ) : (
-              rules.map(r => {
+              filteredRules.map(r => {
                 const ts = typeStyle[r.type] || {};
-                const isEarning = r.category === 'Earnings';
+                const isEarning = r.category === 'Earnings' || r.rawCategory === 'BASIC' || r.rawCategory === 'ALLOWANCE';
                 return (
                   <tr key={r.id} onMouseEnter={e => e.currentTarget.style.background = '#f7fafa'} onMouseLeave={e => e.currentTarget.style.background = 'white'}>
-                    <td><span style={{ fontFamily: 'monospace', fontSize: '0.7rem', background: '#f7fafa', padding: '0.2rem 0.4rem', borderRadius: '4px' }}>{r.id}</span></td>
+                    <td className="font-mono text-xs font-semibold">{r.sequence}</td>
+                    <td><span style={{ fontFamily: 'monospace', fontSize: '0.75rem', fontWeight: 700, background: '#f0f4f8', color: '#1e3a8a', padding: '0.2rem 0.5rem', borderRadius: '4px' }}>{r.id}</span></td>
                     <td className="font-bold text-[13px]" style={{ color: 'var(--text-primary)' }}>{r.name}</td>
                     <td><span style={{ background: isEarning ? '#eaf5ef' : '#fff2f2', color: isEarning ? '#0b7a42' : '#b71c1c', fontSize: '0.7rem', fontWeight: 700, padding: '0.2rem 0.5rem', borderRadius: '4px' }}>{r.category}</span></td>
                     <td><span style={{ background: ts.bg, color: ts.text, fontSize: '0.7rem', fontWeight: 700, padding: '0.2rem 0.5rem', borderRadius: '4px' }}>{r.type}</span></td>
-                    <td className="text-xs" style={{ color: 'var(--text-secondary)', maxWidth: '220px' }}>{r.computation}</td>
-                    <td><span style={{ fontSize: '0.7rem', fontWeight: 700, color: r.taxable ? '#0b7a42' : 'var(--text-secondary)' }}>{r.taxable ? '✓ Yes' : 'No'}</span></td>
-                    <td><span style={{ fontSize: '0.7rem', fontWeight: 700, color: r.pfApplicable ? '#0b7a42' : 'var(--text-secondary)' }}>{r.pfApplicable ? '✓ Yes' : 'No'}</span></td>
+                    <td className="text-xs" style={{ color: 'var(--text-secondary)', maxWidth: '240px' }}>{r.computation}</td>
                     <td>
-                      <button style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--secondary)', background: 'none', border: '1px solid var(--border-structural)', borderRadius: '4px', padding: '0.2rem 0.5rem', cursor: 'pointer' }}>Edit</button>
+                      <span className={`badge ${r.isActive ? 'badge-green' : 'badge-amber'}`} style={{ fontSize: '10px' }}>
+                        {r.isActive ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <button
+                          onClick={() => openEdit(r)}
+                          style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--secondary)', background: 'none', border: '1px solid var(--border-structural)', borderRadius: '4px', padding: '0.2rem 0.5rem', cursor: 'pointer', fontFamily: 'inherit' }}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDelete(r)}
+                          style={{ fontSize: '0.7rem', fontWeight: 600, color: '#dc2626', background: 'none', border: '1px solid #fecaca', borderRadius: '4px', padding: '0.2rem 0.5rem', cursor: 'pointer', fontFamily: 'inherit' }}
+                          title="Delete rule"
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -152,85 +389,164 @@ const SalaryRulesView = () => {
         </table>
       </div>
 
-      {/* New Rule Modal */}
+      {/* New / Edit Rule Modal */}
       {showModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div style={{ background: '#fff', borderRadius: '12px', width: '450px', padding: '24px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: 'var(--primary)' }}>New Salary Rule</h3>
-              <button onClick={() => setShowModal(false)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '18px' }}>✕</button>
+        <div
+          onClick={e => e.target === e.currentTarget && setShowModal(false)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, backdropFilter: 'blur(3px)' }}
+        >
+          <div style={{ background: '#fff', borderRadius: '14px', width: '520px', maxWidth: '95vw', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 24px 80px rgba(0,0,0,0.2)', overflow: 'hidden', animation: 'modalPop 0.25s cubic-bezier(0.16,1,0.3,1)' }}>
+            <div style={{ padding: '18px 22px 14px', borderBottom: '1px solid var(--border-structural)', background: 'var(--surface-structural, #f7fafa)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>SALARY RULE CONFIGURATION</div>
+                <h3 style={{ margin: '2px 0 0', fontSize: '1.05rem', fontWeight: 800, color: 'var(--primary)' }}>
+                  {editRule ? `Edit Rule — ${editRule.name}` : 'New Salary Rule'}
+                </h3>
+              </div>
+              <button onClick={() => setShowModal(false)} style={{ width: 30, height: 30, borderRadius: '50%', background: 'var(--border-structural)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
+              </button>
             </div>
-            <form onSubmit={handleCreate} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Rule Name</label>
-                <input 
-                  type="text" 
-                  required 
-                  className="form-input" 
-                  value={newRule.name} 
-                  onChange={e => setNewRule({ ...newRule, name: e.target.value })} 
-                  placeholder="e.g. Remote Work Subsidy"
-                />
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+            <form onSubmit={handleSave} style={{ padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: '13px' }}>
+              
+              {!editRule && (
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Category</label>
-                  <select 
-                    className="control-select" 
-                    style={{ width: '100%' }}
-                    value={newRule.category} 
-                    onChange={e => setNewRule({ ...newRule, category: e.target.value })}
+                  <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, marginBottom: '5px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Parent Salary Structure *</label>
+                  <select
+                    className="control-select"
+                    style={{ width: '100%', height: 38 }}
+                    value={formData.structureId}
+                    onChange={e => setFormData(f => ({ ...f, structureId: Number(e.target.value) }))}
+                    required
                   >
-                    <option value="Earnings">Earnings</option>
-                    <option value="Deductions">Deductions</option>
+                    {structures.map(s => (
+                      <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '10px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, marginBottom: '5px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Rule Name *</label>
+                  <input
+                    type="text" required
+                    value={formData.name}
+                    onChange={e => setFormData(f => ({ ...f, name: e.target.value }))}
+                    placeholder="e.g. House Rent Allowance"
+                    style={{ width: '100%', height: 38, padding: '0 10px', border: '1px solid var(--border-structural)', borderRadius: '8px', fontSize: '0.85rem', fontFamily: 'inherit', color: 'var(--text-primary)', background: '#fff', outline: 'none', boxSizing: 'border-box' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, marginBottom: '5px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Code (Unique) *</label>
+                  <input
+                    type="text" required
+                    value={formData.code}
+                    onChange={e => setFormData(f => ({ ...f, code: e.target.value.toUpperCase() }))}
+                    placeholder="e.g. HRA"
+                    style={{ width: '100%', height: 38, padding: '0 10px', border: '1px solid var(--border-structural)', borderRadius: '8px', fontSize: '0.85rem', fontFamily: 'inherit', color: 'var(--text-primary)', background: '#fff', outline: 'none', boxSizing: 'border-box' }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, marginBottom: '5px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Category *</label>
+                  <select className="control-select" style={{ width: '100%', height: 38 }} value={formData.category} onChange={e => setFormData(f => ({ ...f, category: e.target.value }))}>
+                    <option value="BASIC">BASIC</option>
+                    <option value="ALLOWANCE">ALLOWANCE</option>
+                    <option value="GROSS">GROSS</option>
+                    <option value="DEDUCTION">DEDUCTION</option>
+                    <option value="NET">NET</option>
                   </select>
                 </div>
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Type</label>
-                  <select 
-                    className="control-select" 
-                    style={{ width: '100%' }}
-                    value={newRule.type} 
-                    onChange={e => setNewRule({ ...newRule, type: e.target.value })}
-                  >
-                    <option value="Fixed">Fixed</option>
-                    <option value="Variable">Variable</option>
-                    <option value="Conditional">Conditional</option>
+                  <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, marginBottom: '5px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Computation Type *</label>
+                  <select className="control-select" style={{ width: '100%', height: 38 }} value={formData.type} onChange={e => setFormData(f => ({ ...f, type: e.target.value }))}>
+                    <option value="PERCENTAGE">PERCENTAGE</option>
+                    <option value="FIXED">FIXED</option>
+                    <option value="FORMULA">FORMULA</option>
                   </select>
                 </div>
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Formula / Computation Expression</label>
-                <input 
-                  type="text" 
-                  required 
-                  className="form-input" 
-                  value={newRule.computation} 
-                  onChange={e => setNewRule({ ...newRule, computation: e.target.value })} 
-                  placeholder="e.g. 5% of Basic or Fixed 2500"
-                />
-              </div>
-              <div style={{ display: 'flex', gap: '16px', marginTop: '4px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', cursor: 'pointer' }}>
-                  <input 
-                    type="checkbox" 
-                    checked={newRule.taxable} 
-                    onChange={e => setNewRule({ ...newRule, taxable: e.target.checked })} 
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, marginBottom: '5px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Sequence *</label>
+                  <input
+                    type="number" required min="1" max="9999"
+                    value={formData.sequence}
+                    onChange={e => setFormData(f => ({ ...f, sequence: e.target.value }))}
+                    style={{ width: '100%', height: 38, padding: '0 10px', border: '1px solid var(--border-structural)', borderRadius: '8px', fontSize: '0.85rem', fontFamily: 'inherit', boxSizing: 'border-box' }}
                   />
-                  Subject to Income Tax
-                </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', cursor: 'pointer' }}>
-                  <input 
-                    type="checkbox" 
-                    checked={newRule.pfApplicable} 
-                    onChange={e => setNewRule({ ...newRule, pfApplicable: e.target.checked })} 
+                </div>
+              </div>
+
+              {/* Dynamic Inputs Based on Computation Type */}
+              {formData.type === 'PERCENTAGE' && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, marginBottom: '5px', color: 'var(--text-secondary)' }}>Percentage Rate (%) *</label>
+                    <input
+                      type="number" required min="0" max="100" step="0.01"
+                      value={formData.percentage}
+                      onChange={e => setFormData(f => ({ ...f, percentage: e.target.value }))}
+                      placeholder="40.0"
+                      style={{ width: '100%', height: 38, padding: '0 10px', border: '1px solid var(--border-structural)', borderRadius: '8px', fontSize: '0.85rem', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, marginBottom: '5px', color: 'var(--text-secondary)' }}>Percentage Base Code *</label>
+                    <input
+                      type="text" required
+                      value={formData.percentageBase}
+                      onChange={e => setFormData(f => ({ ...f, percentageBase: e.target.value.toUpperCase() }))}
+                      placeholder="e.g. BASIC"
+                      style={{ width: '100%', height: 38, padding: '0 10px', border: '1px solid var(--border-structural)', borderRadius: '8px', fontSize: '0.85rem', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {formData.type === 'FIXED' && (
+                <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                  <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, marginBottom: '5px', color: 'var(--text-secondary)' }}>Fixed Flat Amount (₹) *</label>
+                  <input
+                    type="number" required min="0" step="0.01"
+                    value={formData.fixedAmount}
+                    onChange={e => setFormData(f => ({ ...f, fixedAmount: e.target.value }))}
+                    placeholder="5000.00"
+                    style={{ width: '100%', height: 38, padding: '0 10px', border: '1px solid var(--border-structural)', borderRadius: '8px', fontSize: '0.85rem', boxSizing: 'border-box' }}
                   />
-                  PF Applicable
+                </div>
+              )}
+
+              {formData.type === 'FORMULA' && (
+                <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                  <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, marginBottom: '5px', color: 'var(--text-secondary)' }}>Formula Expression *</label>
+                  <input
+                    type="text" required
+                    value={formData.formula}
+                    onChange={e => setFormData(f => ({ ...f, formula: e.target.value }))}
+                    placeholder="e.g. BASIC * 0.4 + HRA"
+                    style={{ width: '100%', height: 38, padding: '0 10px', border: '1px solid var(--border-structural)', borderRadius: '8px', fontSize: '0.85rem', boxSizing: 'border-box' }}
+                  />
+                </div>
+              )}
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '0.82rem', cursor: 'pointer', fontWeight: 500 }}>
+                  <input type="checkbox" checked={formData.isActive} onChange={e => setFormData(f => ({ ...f, isActive: e.target.checked }))} />
+                  Rule is Active
                 </label>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '12px' }}>
-                <button type="button" className="btn-secondary" onClick={() => setShowModal(false)}>Cancel</button>
-                <button type="submit" className="btn-primary">Save Rule</button>
+
+              <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                <button type="button" onClick={() => setShowModal(false)} style={{ flex: 1, height: 38, borderRadius: '8px', border: '1px solid var(--border-structural)', background: '#fff', cursor: 'pointer', fontSize: '0.88rem', fontWeight: 600, fontFamily: 'inherit', color: 'var(--text-secondary)' }}>Cancel</button>
+                <button 
+                  type="submit" 
+                  disabled={submitting}
+                  style={{ flex: 2, height: 38, borderRadius: '8px', border: 'none', background: 'var(--primary, #0f4c81)', color: '#fff', cursor: submitting ? 'wait' : 'pointer', fontSize: '0.88rem', fontWeight: 700, fontFamily: 'inherit' }}
+                >
+                  {submitting ? 'Saving to Database...' : (editRule ? 'Save Changes' : 'Create Salary Rule')}
+                </button>
               </div>
             </form>
           </div>

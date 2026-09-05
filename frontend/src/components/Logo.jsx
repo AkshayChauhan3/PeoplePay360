@@ -1,8 +1,8 @@
 import React from 'react';
 
-const Logo = ({ className = '' }) => (
+const Logo = ({ className = '', collapsed = false }) => (
   <div className={`brand-logo ${className}`}>
-    <svg width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <svg width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0 }}>
       <rect width="36" height="36" rx="9" fill="#3B123F"/>
       {/* C shape: arc open on the right */}
       <path
@@ -15,9 +15,11 @@ const Logo = ({ className = '' }) => (
       {/* Teal dot inside the C */}
       <circle cx="19" cy="18" r="3" fill="#005166"/>
     </svg>
-    <div className="logo-text">
-      <span style={{ color: '#3B123F' }}>PeoplePay</span><span style={{ color: '#005166' }}>360</span>
-    </div>
+    {!collapsed && (
+      <div className="logo-text">
+        <span style={{ color: '#3B123F' }}>PeoplePay</span><span style={{ color: '#005166' }}>360</span>
+      </div>
+    )}
   </div>
 );
 

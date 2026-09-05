@@ -21,6 +21,7 @@ const normalizeContract = (c, i) => {
 
   return {
     id: c.contract_number || c.contract_reference || c.id || `CNT-${1000 + i}`,
+    rawId: c.id,
     employee: empName || 'Employee',
     empId: c.employee?.employee_code || c.employee_id || c.empId || `EMP-${1000 + i}`,
     role: c.job_position?.name || c.job_title || c.role || 'Specialist',
@@ -55,37 +56,132 @@ const AllContractsView = ({ onNavigate }) => {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [showModal, setShowModal] = useState(false);
-  const [newContract, setNewContract] = useState({ employee: '', wage: 150000, structure: 'Standard Fixed Band' });
+  const [employees, setEmployees] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [createError, setCreateError] = useState('');
+  const [structures, setStructures] = useState([]);
+  const [newContract, setNewContract] = useState({
+    employeeId: '',
+    contractNumber: '',
+    wage: 150000,
+    structureId: '',
+    status: 'DRAFT',
+    startDate: new Date().toISOString().split('T')[0],
+    endDate: '',
+  });
+
+  const fetchContracts = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [contractsData, empsData, structuresData] = await Promise.allSettled([
+        apiService.getContracts(),
+        apiService.getEmployees({ limit: 100 }),
+        apiService.getSalaryStructures(),
+      ]);
+      if (contractsData.status === 'fulfilled') {
+        const raw = contractsData.value?.items || contractsData.value?.data || (Array.isArray(contractsData.value) ? contractsData.value : []);
+        setContracts(raw.map(normalizeContract));
+      }
+      if (empsData.status === 'fulfilled') {
+        const rawEmps = empsData.value?.items || (Array.isArray(empsData.value) ? empsData.value : []);
+        setEmployees(rawEmps);
+        if (rawEmps.length > 0) {
+          setNewContract(prev => ({
+            ...prev,
+            employeeId: prev.employeeId || rawEmps[0].id,
+            contractNumber: prev.contractNumber || `CNT-2026-${String(Date.now()).slice(-4)}`,
+          }));
+        }
+      }
+      if (structuresData.status === 'fulfilled') {
+        const rawStructs = structuresData.value?.items || (Array.isArray(structuresData.value) ? structuresData.value : []);
+        setStructures(rawStructs);
+        if (rawStructs.length > 0) {
+          setNewContract(prev => ({ ...prev, structureId: prev.structureId || rawStructs[0].id }));
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch contracts:', err);
+      setError(err.message || 'Unable to load contracts from database.');
+      setContracts([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchContracts = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const data = await apiService.getContracts();
-        const raw = data?.items || data?.data || (Array.isArray(data) ? data : []);
-        setContracts(raw.map(normalizeContract));
-      } catch (err) {
-        console.error('Failed to fetch contracts:', err);
-        setError(err.message || 'Unable to load contracts from database.');
-        setContracts([]);
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchContracts();
   }, []);
 
   const handleCreate = async (e) => {
     e.preventDefault();
+    setSaving(true);
+    setCreateError('');
     try {
-      const created = await apiService.createContract(newContract);
-      setContracts(prev => [normalizeContract(created, prev.length), ...prev]);
+      const empId = newContract.employeeId;
+      if (!empId) {
+        throw new Error('Please select an employee.');
+      }
+      const contractNum = newContract.contractNumber?.trim()
+        ? newContract.contractNumber.trim().toUpperCase()
+        : `CNT-2026-${String(Date.now()).slice(-4)}`;
+      const startDate = newContract.startDate || new Date().toISOString().split('T')[0];
+      const endDate = newContract.endDate ? newContract.endDate : null;
+      const wageVal = Number(newContract.wage) || 150000;
+      const structId = newContract.structureId ? Number(newContract.structureId) : null;
+      const contractStatus = newContract.status || 'DRAFT';
+
+      await apiService.createContract({
+        employee_id: empId,
+        contract_number: contractNum,
+        start_date: startDate,
+        end_date: endDate,
+        wage: wageVal,
+        salary_structure_id: structId,
+        status: contractStatus,
+      });
+
       setShowModal(false);
-      setNewContract({ employee: '', wage: 150000, structure: 'Standard Fixed Band' });
+      await fetchContracts();
     } catch (err) {
       console.error('Failed to create contract:', err);
+      let msg = err.message || 'Failed to generate contract';
+      if (err?.data?.detail) {
+        msg = typeof err.data.detail === 'string' ? err.data.detail : JSON.stringify(err.data.detail);
+      }
+      setCreateError(msg);
+    } finally {
+      setSaving(false);
     }
+  };
+
+  const handleExportCSV = () => {
+    if (contracts.length === 0) {
+      alert('No contracts to export.');
+      return;
+    }
+    const headers = ['Contract ID', 'Employee', 'Employee Code', 'Role', 'Department', 'Start Date', 'End Date', 'Monthly Wage', 'Status', 'Structure'];
+    const rows = filteredContracts.map(c => [
+      `"${c.id}"`,
+      `"${c.employee}"`,
+      `"${c.empId}"`,
+      `"${c.role}"`,
+      `"${c.department}"`,
+      `"${c.start}"`,
+      `"${c.end}"`,
+      c.rawWage,
+      `"${c.status}"`,
+      `"${c.structure}"`
+    ]);
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `Contracts_Register_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   // Dynamic KPI computations
@@ -121,7 +217,7 @@ const AllContractsView = ({ onNavigate }) => {
           <p>Manage employee contracts, tenure terms, and recurring wage commitments.</p>
         </div>
         <div className="dashboard-controls">
-          <button className="btn-secondary" onClick={() => window.print()}>
+          <button className="btn-secondary" onClick={handleExportCSV}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
             Export Register
           </button>
@@ -277,7 +373,7 @@ const AllContractsView = ({ onNavigate }) => {
               </tr>
             ) : (
               filteredContracts.map(contract => (
-                <tr key={contract.id} className="cursor-pointer hover:bg-gray-50 transition-colors group" onClick={() => onNavigate('contract_detail')}>
+                <tr key={contract.id} className="cursor-pointer hover:bg-gray-50 transition-colors group" onClick={() => onNavigate('contract_detail', contract.rawId || contract.id)}>
                   <td onClick={(e) => e.stopPropagation()}><input type="checkbox" className="rounded text-primary focus:ring-primary" /></td>
                   <td><span className="font-mono font-bold text-sm" style={{ color: 'var(--text-primary)' }}>{contract.id}</span></td>
                   <td>
@@ -324,49 +420,134 @@ const AllContractsView = ({ onNavigate }) => {
 
       {/* Create Contract Modal */}
       {showModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div style={{ background: '#fff', borderRadius: '12px', width: '450px', padding: '24px' }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '16px' }}>
+          <div style={{ background: '#fff', borderRadius: '12px', width: '520px', maxWidth: '95vw', padding: '24px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: 'var(--primary)' }}>New Employment Contract</h3>
-              <button onClick={() => setShowModal(false)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '18px' }}>✕</button>
+              <button onClick={() => setShowModal(false)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '18px', color: 'var(--text-secondary)' }}>✕</button>
             </div>
+
+            {createError && (
+              <div style={{ padding: '10px 12px', background: '#fff2f2', border: '1px solid #fca5a5', borderRadius: '6px', color: '#b91c1c', fontSize: '12px', marginBottom: '14px', lineHeight: 1.4 }}>
+                <strong>Error: </strong>{createError}
+              </div>
+            )}
+
             <form onSubmit={handleCreate} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Employee Name</label>
-                <input 
-                  type="text" 
-                  required 
-                  className="form-input" 
-                  value={newContract.employee} 
-                  onChange={e => setNewContract({ ...newContract, employee: e.target.value })} 
-                  placeholder="e.g. Ramesh Chandra"
-                />
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px', color: 'var(--text-primary)' }}>Select Employee *</label>
+                <select
+                  required
+                  className="control-select"
+                  style={{ width: '100%', height: '38px', borderRadius: '8px' }}
+                  value={newContract.employeeId}
+                  onChange={e => setNewContract({ ...newContract, employeeId: e.target.value })}
+                >
+                  <option value="">-- Choose Employee --</option>
+                  {employees.map(emp => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.first_name} {emp.last_name} ({emp.employee_code}) · {emp.job_position_title || 'Staff'}
+                    </option>
+                  ))}
+                </select>
               </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px', color: 'var(--text-primary)' }}>Contract Number *</label>
+                  <input
+                    type="text"
+                    required
+                    className="form-input"
+                    value={newContract.contractNumber}
+                    onChange={e => setNewContract({ ...newContract, contractNumber: e.target.value.toUpperCase() })}
+                    placeholder="e.g. CNT-2026-0045"
+                    style={{ width: '100%', height: '38px', borderRadius: '8px', padding: '0 10px', boxSizing: 'border-box' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px', color: 'var(--text-primary)' }}>Status *</label>
+                  <select
+                    className="control-select"
+                    style={{ width: '100%', height: '38px', borderRadius: '8px' }}
+                    value={newContract.status}
+                    onChange={e => setNewContract({ ...newContract, status: e.target.value })}
+                  >
+                    <option value="DRAFT">DRAFT (Pending Activation)</option>
+                    <option value="RUNNING">RUNNING (Active Immediately)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px', color: 'var(--text-primary)' }}>Start Date *</label>
+                  <input
+                    type="date"
+                    required
+                    className="form-input"
+                    value={newContract.startDate}
+                    onChange={e => setNewContract({ ...newContract, startDate: e.target.value })}
+                    style={{ width: '100%', height: '38px', borderRadius: '8px', padding: '0 10px', boxSizing: 'border-box' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px', color: 'var(--text-primary)' }}>End Date (Optional)</label>
+                  <input
+                    type="date"
+                    className="form-input"
+                    value={newContract.endDate}
+                    onChange={e => setNewContract({ ...newContract, endDate: e.target.value })}
+                    placeholder="Permanent if empty"
+                    style={{ width: '100%', height: '38px', borderRadius: '8px', padding: '0 10px', boxSizing: 'border-box' }}
+                  />
+                </div>
+              </div>
+
               <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Monthly Wage (₹)</label>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px', color: 'var(--text-primary)' }}>Monthly Wage (₹) *</label>
                 <input 
                   type="number" 
                   required 
+                  min="1"
                   className="form-input" 
                   value={newContract.wage} 
                   onChange={e => setNewContract({ ...newContract, wage: Number(e.target.value) })} 
+                  style={{ width: '100%' }}
                 />
               </div>
+
               <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Salary Structure</label>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px', color: 'var(--text-primary)' }}>Salary Structure</label>
                 <select 
                   className="control-select" 
-                  style={{ width: '100%' }}
-                  value={newContract.structure} 
-                  onChange={e => setNewContract({ ...newContract, structure: e.target.value })}
+                  style={{ width: '100%', height: '38px', borderRadius: '8px' }}
+                  value={newContract.structureId} 
+                  onChange={e => setNewContract({ ...newContract, structureId: e.target.value })}
                 >
-                  <option value="Standard Full-Time Tech & Corporate Structure">Standard Full-Time Tech & Corporate Structure</option>
-                  <option value="Executive Remuneration Model">Executive Remuneration Model</option>
+                  <option value="">-- Optional / Default Structure --</option>
+                  {structures.map(s => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} ({s.code})
+                    </option>
+                  ))}
                 </select>
               </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '12px' }}>
-                <button type="button" className="btn-secondary" onClick={() => setShowModal(false)}>Cancel</button>
-                <button type="submit" className="btn-primary">Generate Contract</button>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '12px', borderTop: '1px solid var(--border-structural)', paddingTop: '12px' }}>
+                <button type="button" className="btn-secondary" onClick={() => setShowModal(false)} disabled={saving}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn-primary" disabled={saving} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  {saving ? (
+                    <>
+                      <div style={{ width: '14px', height: '14px', border: '2px solid rgba(255,255,255,0.4)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                      Generating...
+                    </>
+                  ) : (
+                    'Generate Contract'
+                  )}
+                </button>
               </div>
             </form>
           </div>

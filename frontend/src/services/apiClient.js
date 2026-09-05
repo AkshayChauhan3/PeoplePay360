@@ -62,18 +62,49 @@ class ApiClient {
 
       if (!response.ok) {
         const errBody = await response.json().catch(() => ({}));
-        const message = errBody.detail || `Request failed with status ${response.status}`;
+        let message = `Request failed with status ${response.status}`;
+        if (typeof errBody.detail === 'string') {
+          message = errBody.detail;
+        } else if (Array.isArray(errBody.detail)) {
+          message = errBody.detail.map(d => d.msg || (d.loc ? `${d.loc.slice(-1)}: required` : JSON.stringify(d))).join(', ');
+        } else if (errBody.detail && typeof errBody.detail === 'object') {
+          message = JSON.stringify(errBody.detail);
+        } else if (errBody.message) {
+          message = errBody.message;
+        }
         const error = new Error(message);
         error.status = response.status;
         error.data = errBody;
         throw error;
       }
 
-      return await response.json();
+      if (response.status === 204) {
+        return { success: true };
+      }
+
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        return await response.json();
+      }
+      return await response.text();
     } catch (err) {
       // Re-throw so caller can decide or use mock fallback
       throw err;
     }
+  }
+
+  async downloadBlob(endpoint) {
+    const url = `${this.baseUrl}${endpoint}`;
+    const token = this.getAccessToken();
+    const headers = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    const response = await fetch(url, { method: 'GET', headers });
+    if (!response.ok) {
+      throw new Error(`Download failed with status ${response.status}`);
+    }
+    return await response.blob();
   }
 
   get(endpoint, headers = {}) {

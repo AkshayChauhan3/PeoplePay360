@@ -18,7 +18,6 @@ import PayrunsView from './components/PayrunsView';
 import PayslipsView from './components/PayslipsView';
 import SalaryStructuresView from './components/SalaryStructuresView';
 import SalaryRulesView from './components/SalaryRulesView';
-import ReportsView from './components/ReportsView';
 import SettingsView from './components/SettingsView';
 import { apiService } from './services/apiService';
 import { apiClient } from './services/apiClient';
@@ -132,7 +131,6 @@ function App() {
       case 'salary_structures':   return <SalaryStructuresView onNavigate={setCurrentView} currentUser={currentUser} />;
       case 'salary_rules':        return <SalaryRulesView onNavigate={setCurrentView} currentUser={currentUser} />;
       // System
-      case 'reports':             return <ReportsView onNavigate={setCurrentView} currentUser={currentUser} />;
       case 'settings':            return <SettingsView onNavigate={setCurrentView} currentUser={currentUser} />;
       default:                    return <DashboardPortal onNavigate={setCurrentView} currentUser={currentUser} />;
     }

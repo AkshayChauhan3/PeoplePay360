@@ -450,9 +450,112 @@
     color: var(--primary);
   }
 
+  /* ── Production Enterprise Login Layout ── */
+  .prod-login-container {
+    min-height: 100vh;
+    width: 100%;
+    display: flex;
+    background: #ffffff;
+  }
+
+  .prod-login-hero {
+    flex: 1 1 48%;
+    max-width: 48%;
+    background: linear-gradient(150deg, #18051f 0%, #300d34 35%, #023846 75%, #01222b 100%);
+    color: #ffffff;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 3.5rem 4rem;
+    position: relative;
+    overflow: hidden;
+    z-index: 1;
+  }
+
+  .prod-login-hero-glow-1 {
+    position: absolute;
+    top: -120px;
+    right: -100px;
+    width: 450px;
+    height: 450px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(0, 191, 165, 0.22) 0%, rgba(0, 81, 102, 0.06) 55%, transparent 70%);
+    filter: blur(40px);
+    pointer-events: none;
+    z-index: -1;
+  }
+
+  .prod-login-hero-glow-2 {
+    position: absolute;
+    bottom: -80px;
+    left: -80px;
+    width: 420px;
+    height: 420px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(168, 85, 247, 0.2) 0%, rgba(59, 18, 63, 0.08) 55%, transparent 70%);
+    filter: blur(45px);
+    pointer-events: none;
+    z-index: -1;
+  }
+
+  .prod-login-hero-grid {
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(rgba(255, 255, 255, 0.09) 1px, transparent 1px);
+    background-size: 26px 26px;
+    opacity: 0.8;
+    pointer-events: none;
+    z-index: -1;
+  }
+
+  .prod-login-form-pane {
+    flex: 1 1 52%;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    background: #ffffff;
+    padding: 2.5rem 3.5rem;
+    overflow-y: auto;
+  }
+
+  .prod-login-feature-card {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    backdrop-filter: blur(12px);
+    transition: all 0.2s ease;
+  }
+  .prod-login-feature-card:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.22);
+    transform: translateY(-2px);
+  }
+
+  .prod-login-stat-box {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  @media (max-width: 992px) {
+    .prod-login-container {
+      flex-direction: column;
+    }
+    .prod-login-hero {
+      display: none;
+    }
+    .prod-login-form-pane {
+      padding: 2rem 1.25rem;
+      flex: 1 1 100%;
+    }
+  }
+
   /* Dashboard Structure */
   .sidebar {
     width: 260px;
+    flex-shrink: 0;
     background: rgba(255, 255, 255, 0.88);
     backdrop-filter: blur(20px) saturate(180%);
     -webkit-backdrop-filter: blur(20px) saturate(180%);
@@ -460,6 +563,36 @@
     display: flex;
     flex-direction: column;
     z-index: 10;
+    transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .sidebar.collapsed {
+    width: 72px;
+    flex-shrink: 0;
+  }
+  .sidebar.collapsed .sidebar-brand {
+    padding: 1.25rem 0.5rem;
+    justify-content: center;
+  }
+  .sidebar.collapsed .nav-section-title {
+    display: none;
+  }
+  .sidebar.collapsed .nav-section {
+    margin-bottom: 0.75rem;
+  }
+  .sidebar.collapsed .nav-item {
+    justify-content: center;
+    padding: 0.6rem 0;
+    margin: 0.2rem 0.4rem;
+    border-left: none;
+  }
+  .sidebar.collapsed .nav-item.active {
+    border-left: none;
+    border-radius: 8px;
+    background: var(--surface-purple-tint, #f6f0f7);
+  }
+  .sidebar.collapsed .sidebar-footer {
+    padding: 1rem 0.5rem;
+    justify-content: center;
   }
   
   .sidebar-brand {
@@ -907,6 +1040,7 @@
   }
   .main-content {
     flex: 1;
+    min-width: 0;
     display: flex;
     flex-direction: column;
     background: 
@@ -1252,4 +1386,15 @@
   .data-table tbody tr:last-child td {
     border-bottom: none;
   }
+}
+
+/* ── Global utility animations ── */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@keyframes dropdownFadeIn {
+  from { opacity: 0; transform: translateY(-6px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }

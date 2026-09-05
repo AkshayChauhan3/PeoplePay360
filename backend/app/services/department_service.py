@@ -132,6 +132,7 @@ async def create_department(db: AsyncSession, data: DepartmentCreate) -> Departm
     # 4. Add to session and flush to generate ID and timestamps from PostgreSQL
     db.add(dept)
     await db.flush()
+    await db.commit()
     await db.refresh(dept)
     return dept
 
@@ -189,8 +190,9 @@ async def update_department(db: AsyncSession, dept_id: int, data: DepartmentUpda
     if data.is_active is not None:
         dept.is_active = data.is_active
 
-    # 5. Flush updates to database and refresh model attributes
+    # 5. Flush updates to database, commit, and refresh model attributes
     await db.flush()
+    await db.commit()
     await db.refresh(dept)
     return dept
 
@@ -241,6 +243,7 @@ async def deactivate_department(db: AsyncSession, dept_id: int) -> Department:
     # 4. Perform soft-deactivation (retains relational integrity for historical records)
     dept.is_active = False
     await db.flush()
+    await db.commit()
     await db.refresh(dept)
     return dept
 

@@ -48,10 +48,22 @@ const DashboardPortal = ({ onNavigate, currentUser }) => {
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
-        const [summaryRes, leaveReqsRes] = await Promise.allSettled([
+        const [summaryRes, leaveReqsRes, sessionRes] = await Promise.allSettled([
           apiService.getDashboardSummary(),
           apiService.getLeaveRequests(),
+          apiService.getAttendanceSession(),
         ]);
+
+        if (sessionRes.status === 'fulfilled' && sessionRes.value) {
+          const sess = sessionRes.value;
+          setIsClockedIn(Boolean(sess.has_active_session));
+          if (sess.check_in) {
+            const timeStr = typeof sess.check_in === 'string' && sess.check_in.includes('T') 
+              ? sess.check_in.split('T')[1]?.slice(0, 5) 
+              : sess.check_in;
+            setClockInTimestamp(`Today, ${timeStr}`);
+          }
+        }
 
         if (summaryRes.status === 'fulfilled' && summaryRes.value) {
           const res = summaryRes.value;
@@ -135,6 +147,27 @@ const DashboardPortal = ({ onNavigate, currentUser }) => {
 
   const handleToggleChecklist = (key) => {
     setAuditChecklist(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const handleClockIn = async () => {
+    try {
+      await apiService.checkIn();
+      setIsClockedIn(true);
+      setClockInTimestamp('Just Now');
+    } catch (err) {
+      console.error('Clock in error:', err);
+      alert(`Attendance punch error: ${err.message || 'Account is not linked to an employee profile'}`);
+    }
+  };
+
+  const handleClockOut = async () => {
+    try {
+      await apiService.checkOut();
+      setIsClockedIn(false);
+    } catch (err) {
+      console.error('Clock out error:', err);
+      alert(`Attendance punch error: ${err.message || 'Could not close active session'}`);
+    }
   };
 
   // ==========================================
@@ -500,16 +533,16 @@ const DashboardPortal = ({ onNavigate, currentUser }) => {
             <div className="panel-title">HR Quick Launchpad</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <button className="btn-secondary" onClick={() => onNavigate('directory')} style={{ justifyContent: 'flex-start' }}>
-                👥 Manage Workforce Directory
+                Manage Workforce Directory
               </button>
               <button className="btn-secondary" onClick={() => onNavigate('time_off_requests')} style={{ justifyContent: 'flex-start' }}>
-                🏖️ Time Off & Leave Allocations
+                Time Off & Leave Allocations
               </button>
               <button className="btn-secondary" onClick={() => onNavigate('all_contracts')} style={{ justifyContent: 'flex-start' }}>
-                📄 Employment Contracts
+                Employment Contracts
               </button>
               <button className="btn-secondary" onClick={() => onNavigate('attendance_records')} style={{ justifyContent: 'flex-start' }}>
-                🕒 Daily Attendance Logs
+                Daily Attendance Logs
               </button>
             </div>
           </div>
@@ -666,7 +699,7 @@ const DashboardPortal = ({ onNavigate, currentUser }) => {
                 <span className="badge badge-green" style={{ fontSize: '10px' }}>Active</span>
               </div>
               <button className="btn-secondary" onClick={() => onNavigate('payslips')} style={{ marginTop: '8px' }}>
-                📄 Review Individual Payslips ({summary.activeContracts})
+                Review Individual Payslips ({summary.activeContracts})
               </button>
             </div>
           </div>
@@ -894,26 +927,23 @@ const DashboardPortal = ({ onNavigate, currentUser }) => {
                     onClick={() => alert('Break logged (15 mins lunch/tea).')}
                     style={{ flex: 1 }}
                   >
-                    ☕ Take a Break
+                    Take a Break
                   </button>
                   <button 
                     className="btn-primary" 
-                    onClick={() => setIsClockedIn(false)}
+                    onClick={handleClockOut}
                     style={{ flex: 1, background: 'var(--color-critical, #b71c1c)' }}
                   >
-                    ⏹️ Clock Out for Today
+                    Clock Out for Today
                   </button>
                 </>
               ) : (
                 <button 
                   className="btn-primary" 
-                  onClick={() => {
-                    setIsClockedIn(true);
-                    setClockInTimestamp('Just Now');
-                  }}
+                  onClick={handleClockIn}
                   style={{ flex: 1, background: 'var(--color-success, #0b7a42)' }}
                 >
-                  ▶️ Clock In
+                  Clock In
                 </button>
               )}
             </div>
@@ -990,13 +1020,13 @@ const DashboardPortal = ({ onNavigate, currentUser }) => {
           <div className="panel-title">Self-Service Quick Actions</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             <button className="btn-secondary" onClick={() => onNavigate('time_off_requests')} style={{ justifyContent: 'flex-start' }}>
-              🏖️ Apply for Leave / Time Off
+              Apply for Leave / Time Off
             </button>
             <button className="btn-secondary" onClick={() => onNavigate('attendance_records')} style={{ justifyContent: 'flex-start' }}>
-              🕒 View My Attendance Logs
+              View My Attendance Logs
             </button>
             <button className="btn-secondary" onClick={() => onNavigate('payslips')} style={{ justifyContent: 'flex-start' }}>
-              📄 View Tax Deduction & Payslips
+              View Tax Deduction & Payslips
             </button>
           </div>
         </div>

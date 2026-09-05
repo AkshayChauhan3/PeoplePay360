@@ -25,9 +25,15 @@ AsyncSessionLocal = async_sessionmaker(
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """
     FastAPI dependency yielding a request-scoped async database session.
+    Ensures that any modifications made during a successful request lifecycle
+    are safely committed to PostgreSQL, and rolled back if an error occurs.
     """
     async with AsyncSessionLocal() as session:
         try:
             yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
         finally:
             await session.close()
