@@ -11,21 +11,15 @@ if TYPE_CHECKING:
 
 
 def _utcnow() -> datetime:
-    """Helper returning current timestamp in UTC timezone."""
     return datetime.now(timezone.utc)
 
 
 class Department(Base):
     """
-    Department master entity representing an organizational unit.
+    Department organizational entity.
 
-    Examples: 'Engineering', 'Human Resources', 'Finance & Accounts', 'Sales'.
-
-    Key constraints:
-    - `name` is unique across the company.
-    - `code` is unique and normalized to uppercase (e.g. 'ENG', 'FIN').
-    - `is_active` supports soft deactivation, ensuring historical payslips,
-      attendance, and contracts retain their organizational reference.
+    Groups employees and provides department-level aggregations
+    for payroll analytics and dashboard charts.
     """
 
     __tablename__ = "departments"
@@ -36,7 +30,6 @@ class Department(Base):
         autoincrement=True,
     )
 
-    # Department name (e.g. "Engineering"). Unique and indexed.
     name: Mapped[str] = mapped_column(
         String(150),
         unique=True,
@@ -44,7 +37,6 @@ class Department(Base):
         nullable=False,
     )
 
-    # Short organizational code (e.g. "ENG"). Unique and normalized.
     code: Mapped[str] = mapped_column(
         String(50),
         unique=True,
@@ -57,7 +49,6 @@ class Department(Base):
         nullable=True,
     )
 
-    # Soft deactivation flag. Prevents cascading deletes from breaking history.
     is_active: Mapped[bool] = mapped_column(
         Boolean,
         default=True,
@@ -67,20 +58,19 @@ class Department(Base):
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
+        nullable=False,
         default=_utcnow,
         server_default=text("now()"),
-        nullable=False,
     )
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
+        nullable=False,
         default=_utcnow,
         onupdate=_utcnow,
         server_default=text("now()"),
-        nullable=False,
     )
 
-    # Bidirectional relationship: all employees assigned to this department
     employees: Mapped[list["Employee"]] = relationship(
         "Employee",
         back_populates="department",

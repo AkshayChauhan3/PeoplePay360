@@ -130,7 +130,7 @@ def upgrade() -> None:
         "payslips",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
         sa.Column("payrun_id", sa.Integer(), nullable=False),
-        sa.Column("employee_id", sa.Integer(), nullable=False),
+        sa.Column("employee_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("contract_id", sa.Integer(), nullable=False),
         sa.Column("salary_structure_id", sa.Integer(), nullable=False),
         sa.Column("period_start", sa.Date(), nullable=False),

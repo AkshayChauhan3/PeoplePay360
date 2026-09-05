@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -26,7 +27,7 @@ class AttendanceCheckOutRequest(BaseModel):
 class AttendanceCreate(BaseModel):
     """Payload for manual attendance creation by HR or Admin."""
 
-    employee_id: int = Field(..., description="ID of employee")
+    employee_id: UUID | int | str = Field(..., description="ID of employee")
     attendance_date: date = Field(..., description="Calendar date of attendance")
     check_in: datetime = Field(..., description="Timezone-aware check-in datetime")
     check_out: datetime | None = Field(default=None, description="Timezone-aware check-out datetime")
@@ -56,7 +57,7 @@ class AttendanceResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    employee_id: int
+    employee_id: UUID | int | str
     employee_name: str | None = None
     attendance_date: date
     check_in: datetime

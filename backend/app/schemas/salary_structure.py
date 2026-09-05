@@ -1,6 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 from typing import Any
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -72,7 +73,7 @@ class SalaryPreviewRequest(BaseModel):
         decimal_places=2,
         description="Agreed base remuneration from contract",
     )
-    employee_id: int | None = Field(default=None, description="Optional employee context ID")
+    employee_id: UUID | int | str | None = Field(default=None, description="Optional employee context ID")
     contract_id: int | None = Field(default=None, description="Optional contract context ID")
     worked_days: int | None = Field(default=None, ge=0, description="Productive worked days")
     worked_minutes: int | None = Field(default=None, ge=0, description="Productive worked minutes")

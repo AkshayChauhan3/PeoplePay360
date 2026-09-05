@@ -15,6 +15,7 @@ class Base(DeclarativeBase):
 # when env.py imports Base.
 from app.models import (  # noqa: F401, E402
     attendance as _attendance_model,
+    company as _company_model,
     contract as _contract_model,
     department as _department_model,
     employee as _employee_model,
@@ -29,4 +30,5 @@ from app.models import (  # noqa: F401, E402
     time_off as _time_off_model,
     user as _user_model,
 )
+
 

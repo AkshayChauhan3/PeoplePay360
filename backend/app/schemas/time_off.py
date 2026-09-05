@@ -11,6 +11,7 @@ Pydantic v2 schemas for:
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Self
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -84,7 +85,7 @@ class TimeOffTypeResponse(TimeOffTypeBase):
 # ===========================================================================
 
 class TimeOffAllocationCreate(BaseModel):
-    employee_id: int = Field(..., description="Target employee receiving allocation")
+    employee_id: UUID | int | str = Field(..., description="Target employee receiving allocation")
     time_off_type_id: int = Field(..., description="Leave type ID")
     allocation_quantity: Decimal = Field(..., gt=0, description="Total days or hours allocated")
     valid_from: date = Field(..., description="Entitlement start date")
@@ -115,7 +116,7 @@ class TimeOffAllocationUpdate(BaseModel):
 
 class TimeOffAllocationResponse(BaseModel):
     id: int
-    employee_id: int
+    employee_id: UUID | int | str
     time_off_type_id: int
     allocation_quantity: Decimal
     consumed_quantity: Decimal
@@ -137,7 +138,7 @@ class TimeOffAllocationResponse(BaseModel):
 
 class TimeOffRequestCreate(BaseModel):
     time_off_type_id: int = Field(..., description="Leave type ID")
-    employee_id: int | None = Field(None, description="Employee ID (omitted for self-service)")
+    employee_id: UUID | int | str | None = Field(None, description="Employee ID (omitted for self-service)")
     allocation_id: int | None = Field(None, description="Optional specific allocation; resolved automatically if omitted")
     start_date: date = Field(..., description="First day of leave")
     end_date: date = Field(..., description="Last day of leave (inclusive)")
@@ -171,7 +172,7 @@ class TimeOffRequestRefuse(BaseModel):
 
 class TimeOffRequestResponse(BaseModel):
     id: int
-    employee_id: int
+    employee_id: UUID | int | str
     time_off_type_id: int
     allocation_id: int | None
     start_date: date
@@ -206,6 +207,6 @@ class TimeOffBalanceItem(BaseModel):
 
 
 class TimeOffBalanceResponse(BaseModel):
-    employee_id: int
+    employee_id: UUID | int | str
     balances: list[TimeOffBalanceItem]
 

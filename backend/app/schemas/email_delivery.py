@@ -6,6 +6,7 @@ individual delivery audit records, and batch readiness summaries.
 """
 
 from datetime import datetime
+import uuid
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -20,7 +21,7 @@ class PayslipEmailDeliveryItem(BaseModel):
     id: int
     payrun_id: int
     payslip_id: int
-    employee_id: int
+    employee_id: uuid.UUID
     employee_code: str = Field(description="Unique organizational code of the employee")
     employee_name: str = Field(description="Full name of the employee")
     recipient_email: str
@@ -77,7 +78,7 @@ class SinglePayslipEmailResponse(BaseModel):
     """Response returned after sending an individual payslip email."""
 
     payslip_id: int
-    employee_id: int
+    employee_id: uuid.UUID
     recipient_email: str
     status: EmailDeliveryStatus
     error_message: str | None = None

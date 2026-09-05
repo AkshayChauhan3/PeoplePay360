@@ -1,45 +1,32 @@
-from collections.abc import AsyncGenerator
-
+from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
 from app.core.config import settings
 
 # ---------------------------------------------------------------------------
-# Engine
+# Async Database Engine & Session Factory — PeoplePay360
 # ---------------------------------------------------------------------------
 
 engine = create_async_engine(
     settings.database_url,
-    echo=not settings.is_production,  # SQL logging in non-production only
-    pool_pre_ping=True,               # Detect stale connections before use
-    pool_size=10,
-    max_overflow=20,
+    echo=False,
+    future=True,
+    pool_pre_ping=True,
 )
-
-# ---------------------------------------------------------------------------
-# Session factory
-# ---------------------------------------------------------------------------
 
 AsyncSessionLocal = async_sessionmaker(
     bind=engine,
     class_=AsyncSession,
-    expire_on_commit=False,  # Avoids lazy-load errors after commit in async context
+    expire_on_commit=False,
     autocommit=False,
     autoflush=False,
 )
 
 
-# ---------------------------------------------------------------------------
-# FastAPI dependency — request-scoped session
-# ---------------------------------------------------------------------------
-
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """
-    Yield a database session for the duration of a single request.
-
-    - Opens a new session per request.
-    - Rolls back on any unhandled exception.
-    - Always closes the session when the request completes.
+    FastAPI dependency yielding a request-scoped async database session.
+    Ensures that any modifications made during a successful request lifecycle
+    are safely committed to PostgreSQL, and rolled back if an error occurs.
     """
     async with AsyncSessionLocal() as session:
         try:
@@ -50,4 +37,3 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             raise
         finally:
             await session.close()
-

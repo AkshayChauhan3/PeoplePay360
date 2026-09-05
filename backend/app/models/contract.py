@@ -1,9 +1,21 @@
 import enum
+import uuid
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Date, DateTime, Enum, ForeignKey, Integer, Numeric, String, text
+from sqlalchemy import (
+    CheckConstraint,
+    Date,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    text,
+)
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -15,174 +27,143 @@ if TYPE_CHECKING:
     from app.models.salary_structure import SalaryStructure
 
 
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
 class ContractStatus(str, enum.Enum):
     """
-    Lifecycle status of an employment contract.
-
-    States:
-    - DRAFT: Contract prepared or pending review/signature; not yet active for payroll.
-    - RUNNING: Currently in-force contract used for attendance, payroll calculation, and payslips.
-    - EXPIRED: Contract has naturally passed its end date.
-    - CANCELLED: Early termination, voided, or replaced contract.
+    Operational statuses for employment contracts.
     """
-
     DRAFT = "DRAFT"
     RUNNING = "RUNNING"
     EXPIRED = "EXPIRED"
     CANCELLED = "CANCELLED"
 
 
-def _utcnow() -> datetime:
-    """Helper returning current timestamp in UTC timezone."""
-    return datetime.now(timezone.utc)
-
-
 class Contract(Base):
     """
-    Employment Contract Entity.
-
-    Represents a formal legal and financial contract between an Employee and the organization.
-    Defines compensation (wage), assigned department, job position, effective duration,
-    and lifecycle status.
-
-    Key Architectural Rules:
-    - Primary Key: Integer autoincrement (`id`).
-    - Monetary precision: `wage` stored as `Numeric(12, 2)` (never float).
-    - Open-ended / permanent contracts have `end_date = None`.
-    - An employee cannot have multiple overlapping `RUNNING` contracts.
-    - `salary_structure_id` is nullable integer reserved for future salary structure modules.
+    Employment Contract record matching PostgreSQL table schema.
     """
 
     __tablename__ = "contracts"
+    __table_args__ = (
+        CheckConstraint(
+            "end_date IS NULL OR end_date >= start_date",
+            name="ck_contract_date_range",
+        ),
+        CheckConstraint("wage >= 0", name="ck_contract_wage_positive"),
+    )
 
-    # ------------------------------------------------------------------
-    # Primary Key & Identifiers
-    # ------------------------------------------------------------------
     id: Mapped[int] = mapped_column(
         Integer,
         primary_key=True,
         autoincrement=True,
     )
 
-    # Unique reference number (e.g. "CNT-2026-0001"). Indexed for fast lookups.
     contract_number: Mapped[str] = mapped_column(
         String(50),
         unique=True,
-        index=True,
         nullable=False,
+        index=True,
     )
 
-    # ------------------------------------------------------------------
-    # Foreign Keys & Organizational Assignment
-    # ------------------------------------------------------------------
-    # The employee who is party to this contract.
-    employee_id: Mapped[int] = mapped_column(
-        Integer,
+    employee_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
         ForeignKey("employees.id", ondelete="RESTRICT"),
-        index=True,
         nullable=False,
+        index=True,
     )
 
-    # Organizational department associated with this contract.
     department_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("departments.id", ondelete="RESTRICT"),
-        index=True,
         nullable=False,
+        index=True,
     )
 
-    # Organizational job position associated with this contract.
     job_position_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("job_positions.id", ondelete="RESTRICT"),
-        index=True,
         nullable=False,
+        index=True,
     )
 
-    # Salary structure template determining remuneration rules for this contract.
     salary_structure_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("salary_structures.id", ondelete="SET NULL"),
-        index=True,
         nullable=True,
-        default=None,
+        index=True,
     )
 
-    # ------------------------------------------------------------------
-    # Contract Period & Terms
-    # ------------------------------------------------------------------
     start_date: Mapped[date] = mapped_column(
         Date,
         nullable=False,
     )
 
-    # Nullable for permanent / open-ended employment contracts.
     end_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
     )
 
-    # Financial compensation: monthly base wage or agreed remuneration.
-    # Stored with 2 decimal places to ensure exact currency math.
     wage: Mapped[Decimal] = mapped_column(
         Numeric(12, 2),
         nullable=False,
     )
 
-    # ------------------------------------------------------------------
-    # Status & Audit Timestamps
-    # ------------------------------------------------------------------
     status: Mapped[ContractStatus] = mapped_column(
-        Enum(ContractStatus, name="contractstatus", create_type=True),
-        default=ContractStatus.DRAFT,
-        server_default=ContractStatus.DRAFT.value,
+        Enum(ContractStatus, name="contractstatus", create_type=False),
         nullable=False,
-        index=True,
+        default=ContractStatus.DRAFT,
+        server_default=text("'DRAFT'"),
     )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
+        nullable=False,
         default=_utcnow,
         server_default=text("now()"),
-        nullable=False,
     )
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
+        nullable=False,
         default=_utcnow,
         onupdate=_utcnow,
         server_default=text("now()"),
-        nullable=False,
     )
 
     # ------------------------------------------------------------------
     # Relationships
     # ------------------------------------------------------------------
-    # Associated employee
     employee: Mapped["Employee"] = relationship(
         "Employee",
         back_populates="contracts",
-        lazy="selectin",
+        foreign_keys=[employee_id],
+        lazy="joined",
     )
 
-    # Associated department
     department: Mapped["Department"] = relationship(
         "Department",
-        lazy="selectin",
+        foreign_keys=[department_id],
+        lazy="joined",
     )
 
-    # Associated job position
     job_position: Mapped["JobPosition"] = relationship(
         "JobPosition",
-        lazy="selectin",
+        foreign_keys=[job_position_id],
+        lazy="joined",
     )
 
-    # Associated salary structure
     salary_structure: Mapped["SalaryStructure | None"] = relationship(
         "SalaryStructure",
-        back_populates="contracts",
-        lazy="selectin",
+        foreign_keys=[salary_structure_id],
     )
 
+    # Alias for contract_number compatibility
+    @property
+    def reference(self) -> str:
+        return self.contract_number
+
     def __repr__(self) -> str:
-        return f"<Contract id={self.id} number={self.contract_number!r} employee_id={self.employee_id} status={self.status.value}>"
+        return f"<Contract number={self.contract_number!r} status={self.status} wage={self.wage}>"

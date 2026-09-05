@@ -55,6 +55,7 @@ async def create_job_position(db: AsyncSession, data: JobPositionCreate) -> JobP
     )
     db.add(pos)
     await db.flush()
+    await db.commit()
     await db.refresh(pos)
     return pos
 
@@ -92,6 +93,7 @@ async def update_job_position(db: AsyncSession, pos_id: int, data: JobPositionUp
         pos.is_active = data.is_active
 
     await db.flush()
+    await db.commit()
     await db.refresh(pos)
     return pos
 
@@ -120,6 +122,7 @@ async def deactivate_job_position(db: AsyncSession, pos_id: int) -> JobPosition:
 
     pos.is_active = False
     await db.flush()
+    await db.commit()
     await db.refresh(pos)
     return pos
 
