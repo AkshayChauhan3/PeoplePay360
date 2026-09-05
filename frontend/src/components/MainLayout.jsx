@@ -23,13 +23,13 @@ const breadcrumbs = {
   settings: 'System › Settings',
 };
 
-const MainLayout = ({ currentView, onNavigate, currentUser, onLogout, children }) => {
+const MainLayout = ({ currentView, onNavigate, currentUser, onLogout, onSwitchRole, children }) => {
   const displayName = currentUser?.full_name || (currentUser?.email ? currentUser.email.split('@')[0] : 'Admin User');
   const roleName = currentUser?.role ? currentUser.role.replace(/_/g, ' ') : 'Administrator';
 
   return (
     <div className="dashboard-wrapper">
-      <Sidebar currentView={currentView} onNavigate={onNavigate} />
+      <Sidebar currentView={currentView} onNavigate={onNavigate} currentUser={currentUser} />
 
       <main className="main-content">
         <header className="global-header">
@@ -50,6 +50,24 @@ const MainLayout = ({ currentView, onNavigate, currentUser, onLogout, children }
           </div>
 
           <div className="header-actions">
+            {/* Live RBAC Persona / Role Switcher for Hackathon Evaluation */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'var(--surface-structural, #f7fafa)', padding: '3px 8px', borderRadius: '6px', border: '1px solid var(--border-structural)' }}>
+              <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>RBAC:</span>
+              <select 
+                className="control-select" 
+                value={currentUser?.role || 'ADMIN'}
+                onChange={(e) => onSwitchRole && onSwitchRole(e.target.value)}
+                style={{ fontSize: '11px', fontWeight: 700, border: 'none', background: 'transparent', cursor: 'pointer', padding: '2px 4px' }}
+                title="Switch Active Persona / Role"
+              >
+                <option value="ADMIN">👑 Admin (Full Access)</option>
+                <option value="HR_MANAGER">👥 HR Manager</option>
+                <option value="HR_PAYROLL_MANAGER">💳 Payroll Manager</option>
+                <option value="HR_PAYROLL_USER">📋 Payroll Specialist</option>
+                <option value="EMPLOYEE">👤 Employee (Self-Service)</option>
+              </select>
+            </div>
+
             <div className="entity-switcher">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect width="16" height="16" x="4" y="4" rx="2"/><path d="M4 12h16"/><path d="M12 4v16"/></svg>
               Acme Corp Global
