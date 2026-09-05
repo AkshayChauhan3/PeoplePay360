@@ -1,0 +1,1720 @@
+openapi: 3.0.3
+info:
+  title: PeoplePay360 / HRMS OXP API
+  description: >
+    Complete REST API contract for the PeoplePay360 HR & Payroll platform.
+    Provides endpoints for Auth, Master Data (Employees, Departments, Contracts, Schedules),
+    Attendance & Quick Session Widget, Time Off & Leave Allocations, Salary Rules & Engine,
+    Payrun 2-Step Wizard & Payslips, and Payroll Dashboard analytics.
+  version: 0.0.1
+servers:
+  - url: http://localhost:8000
+    description: Local FastAPI Backend
+
+security:
+  - BearerAuth: []
+
+paths:
+  # ==========================================================================
+  # 0. AUTH & USER MANAGEMENT (Excalidraw Flow 0 & v0.0.1 Baseline)
+  # ==========================================================================
+  /api/v1/health:
+    get:
+      summary: Health Check
+      tags: [Health]
+      security: []
+      responses:
+        '200':
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "ok"
+
+  /api/v1/auth/register:
+    post:
+      summary: Register User
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: "admin@peoplepay360.com"
+                password:
+                  type: string
+                  format: password
+                  minLength: 8
+                  example: "Str0ng!Pass"
+                role:
+                  type: string
+                  enum: [EMPLOYEE, HR_MANAGER, HR_PAYROLL_USER, HR_PAYROLL_MANAGER, ADMIN]
+                  default: EMPLOYEE
+                emp_id:
+                  type: string
+                  format: uuid
+                  nullable: true
+      responses:
+        '201':
+          description: User registered successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '409':
+          description: Email already registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/auth/login:
+    post:
+      summary: User Login
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: "aarav.mehta@company.com"
+                password:
+                  type: string
+                  format: password
+                  example: "Password123!"
+      responses:
+        '200':
+          description: Returns access and refresh tokens
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '401':
+          description: Invalid email or password
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/auth/refresh:
+    post:
+      summary: Refresh Access Token
+      tags: [Auth]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token:
+                  type: string
+      responses:
+        '200':
+          description: Returns new access and rotated refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '401':
+          description: Invalid or expired refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/auth/me:
+    get:
+      summary: Get Current Authenticated User
+      tags: [Auth]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /api/v1/users:
+    get:
+      summary: List Users (Admin only)
+      tags: [Users]
+      parameters:
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: role
+          in: query
+          schema:
+            type: string
+            enum: [EMPLOYEE, HR_MANAGER, HR_PAYROLL_USER, HR_PAYROLL_MANAGER, ADMIN]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserResponse'
+    post:
+      summary: Create Login Account & Assign Roles (Admin only)
+      tags: [Users]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCreateIn'
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+
+  /api/v1/users/{id}:
+    patch:
+      summary: Update User Status & Roles (Admin only, self-role-escalation blocked)
+      tags: [Users]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserUpdateIn'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+
+  # ==========================================================================
+  # 1. EMPLOYEES, CONTRACTS & SCHEDULES (Excalidraw Flow 1)
+  # ==========================================================================
+  /api/v1/employees:
+    get:
+      summary: List Employees (Kanban or List view)
+      tags: [Employees]
+      parameters:
+        - name: view
+          in: query
+          schema: { type: string, enum: [kanban, list], default: kanban }
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: department_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: employee_type
+          in: query
+          schema: { type: string, enum: [FULL_TIME, PART_TIME, CONTRACT, INTERN, PROBATION] }
+        - name: is_active
+          in: query
+          schema: { type: boolean, default: true }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EmployeeListOut'
+    post:
+      summary: Create Employee
+      tags: [Employees]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmployeeCreateIn'
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmployeeDetailOut'
+
+  /api/v1/employees/{id}:
+    get:
+      summary: Get Employee Form Details with Smart Button Counts
+      tags: [Employees]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmployeeDetailOut'
+    patch:
+      summary: Update Employee Details
+      tags: [Employees]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EmployeeUpdateIn'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EmployeeDetailOut'
+
+  /api/v1/employees/{id}/contracts:
+    get:
+      summary: Smart Button - List Contracts for Employee
+      tags: [Employees]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ContractOut'
+
+  /api/v1/employees/{id}/attendance:
+    get:
+      summary: Smart Button - List Attendance for Employee
+      tags: [Employees]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AttendanceOut'
+
+  /api/v1/employees/{id}/timeoff:
+    get:
+      summary: Smart Button - List Time Off Requests for Employee
+      tags: [Employees]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LeaveRequestOut'
+
+  /api/v1/departments:
+    get:
+      summary: List Departments
+      tags: [Departments]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DepartmentOut'
+    post:
+      summary: Create Department
+      tags: [Departments]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DepartmentIn'
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepartmentOut'
+
+  /api/v1/departments/{id}:
+    patch:
+      summary: Update Department
+      tags: [Departments]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DepartmentIn'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepartmentOut'
+
+  /api/v1/contracts:
+    get:
+      summary: List Contracts
+      tags: [Contracts]
+      parameters:
+        - name: employee_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: status
+          in: query
+          schema: { type: string, enum: [DRAFT, RUNNING, EXPIRED, CANCELLED] }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ContractOut'
+    post:
+      summary: Create Contract (Rejects overlapping active date ranges)
+      tags: [Contracts]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContractIn'
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContractOut'
+        '409':
+          description: Overlapping contract exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/contracts/{id}:
+    get:
+      summary: Get Contract Detail
+      tags: [Contracts]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContractOut'
+    patch:
+      summary: Update Contract
+      tags: [Contracts]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContractIn'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContractOut'
+
+  /api/v1/schedules:
+    get:
+      summary: List Working Schedules
+      tags: [Schedules]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ScheduleOut'
+    post:
+      summary: Create Working Schedule (Hours per week derived server-side)
+      tags: [Schedules]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScheduleIn'
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduleOut'
+
+  /api/v1/schedules/{id}:
+    get:
+      summary: Get Schedule Detail with Lines
+      tags: [Schedules]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScheduleOut'
+
+  # ==========================================================================
+  # 2. ATTENDANCE & QUICK WIDGET (Excalidraw Flow 2)
+  # ==========================================================================
+  /api/v1/attendance:
+    get:
+      summary: List Attendance Records
+      tags: [Attendance]
+      parameters:
+        - name: employee_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: date_from
+          in: query
+          schema: { type: string, format: date }
+        - name: date_to
+          in: query
+          schema: { type: string, format: date }
+        - name: status
+          in: query
+          schema: { type: string, enum: [PRESENT, LATE, HALF_DAY, MISSING_CHECKOUT, OVERTIME] }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AttendanceOut'
+
+  /api/v1/attendance/session:
+    get:
+      summary: Get Current User's Open Attendance Session (For Header Widget)
+      description: Returns active session state and elapsed time for the header icon popup.
+      tags: [Attendance]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttendanceSessionOut'
+
+  /api/v1/attendance/check-in:
+    post:
+      summary: Check In Current Employee
+      tags: [Attendance]
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttendanceOut'
+        '409':
+          description: Session already open
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/attendance/{id}/check-out:
+    post:
+      summary: Check Out Current Employee
+      tags: [Attendance]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttendanceOut'
+
+  /api/v1/attendance/{id}/correct:
+    post:
+      summary: Manual Attendance Correction (Authorized Roles, writes audit log)
+      tags: [Attendance]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [check_in, check_out, reason]
+              properties:
+                check_in: { type: string, format: date-time }
+                check_out: { type: string, format: date-time }
+                reason: { type: string }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttendanceOut'
+
+  # ==========================================================================
+  # 3. TIME OFF (Excalidraw Flow 3)
+  # ==========================================================================
+  /api/v1/timeoff/types:
+    get:
+      summary: List Time Off Types
+      tags: [Time Off]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LeaveTypeOut'
+    post:
+      summary: Create Time Off Type
+      tags: [Time Off]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeaveTypeIn'
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaveTypeOut'
+
+  /api/v1/timeoff/types/{id}:
+    patch:
+      summary: Update Time Off Type
+      tags: [Time Off]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeaveTypeIn'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaveTypeOut'
+
+  /api/v1/timeoff/allocations:
+    get:
+      summary: List Leave Allocations / Balances
+      tags: [Time Off]
+      parameters:
+        - name: employee_id
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AllocationOut'
+    post:
+      summary: Grant Leave Allocation
+      tags: [Time Off]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AllocationIn'
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AllocationOut'
+
+  /api/v1/timeoff/allocations/{id}:
+    patch:
+      summary: Update Leave Allocation
+      tags: [Time Off]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AllocationIn'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AllocationOut'
+
+  /api/v1/timeoff/requests:
+    get:
+      summary: List Time Off Requests
+      tags: [Time Off]
+      parameters:
+        - name: employee_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: status
+          in: query
+          schema: { type: string, enum: [PENDING, APPROVED, REFUSED] }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LeaveRequestOut'
+    post:
+      summary: Submit Leave Request
+      tags: [Time Off]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LeaveRequestIn'
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaveRequestOut'
+
+  /api/v1/timeoff/requests/{id}/approve:
+    post:
+      summary: Approve Leave Request (Atomic schedule duration calculation & allocation deduction)
+      tags: [Time Off]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaveRequestOut'
+        '409':
+          description: Insufficient balance or invalid state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorEnvelope'
+
+  /api/v1/timeoff/requests/{id}/refuse:
+    post:
+      summary: Refuse Leave Request
+      tags: [Time Off]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LeaveRequestOut'
+
+  # ==========================================================================
+  # 4. SALARY STRUCTURES & RULES (Excalidraw Flow 5)
+  # ==========================================================================
+  /api/v1/salary/structures:
+    get:
+      summary: List Salary Structures
+      tags: [Salary]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SalaryStructureOut'
+    post:
+      summary: Create Salary Structure
+      tags: [Salary]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SalaryStructureIn'
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SalaryStructureOut'
+
+  /api/v1/salary/structures/{id}:
+    get:
+      summary: Get Salary Structure Detail with Rules
+      tags: [Salary]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SalaryStructureOut'
+    patch:
+      summary: Update Salary Structure
+      tags: [Salary]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SalaryStructureIn'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SalaryStructureOut'
+
+  /api/v1/salary/rules:
+    get:
+      summary: List Salary Rules
+      tags: [Salary]
+      parameters:
+        - name: salary_structure_id
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SalaryRuleOut'
+    post:
+      summary: Create Salary Rule (Fixed, Percentage, or Safe AST Formula)
+      tags: [Salary]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SalaryRuleIn'
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SalaryRuleOut'
+
+  /api/v1/salary/rules/{id}:
+    patch:
+      summary: Update Salary Rule
+      tags: [Salary]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SalaryRuleIn'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SalaryRuleOut'
+
+  # ==========================================================================
+  # 5. PAYROLL: PAYRUN WIZARD & PAYSLIPS (Excalidraw Flow 4)
+  # ==========================================================================
+  /api/v1/payruns:
+    get:
+      summary: List Payruns
+      tags: [Payruns]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PayrunListOut'
+    post:
+      summary: Payrun Wizard Step 2 - Atomically Create Payrun and Payslips
+      description: Atomically creates batch and payslips only for the selected employee IDs.
+      tags: [Payruns]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PayrunCreateIn'
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayrunDetailOut'
+
+  /api/v1/payruns/preview-eligible-employees:
+    post:
+      summary: Payrun Wizard Step 1 - Preview Eligible Employees (ZERO DB WRITES)
+      description: Validates scope and returns eligible staff without creating any database records.
+      tags: [Payruns]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PayrunPreviewIn'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EligibleEmployeePreview'
+
+  /api/v1/payruns/{id}:
+    get:
+      summary: Get Payrun Detail & Summary Payslip Table
+      tags: [Payruns]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayrunDetailOut'
+
+  /api/v1/payruns/{id}/compute:
+    post:
+      summary: Compute Payrun (Resolves contracts & atomically replaces draft lines)
+      tags: [Payruns]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayrunDetailOut'
+
+  /api/v1/payruns/{id}/validate:
+    post:
+      summary: Validate Payrun (Locks batch & generates input fingerprint)
+      tags: [Payruns]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayrunDetailOut'
+
+  /api/v1/payruns/{id}/mark-paid:
+    post:
+      summary: Mark Payrun Paid (Status update, no actual money movement)
+      tags: [Payruns]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                payment_reference: { type: string, example: "HDFC-NEFT-BATCH-9021" }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayrunDetailOut'
+
+  /api/v1/payruns/{id}/send-payslips:
+    post:
+      summary: Bulk Dispatch Payslip PDFs to Employees via Email
+      tags: [Payruns]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_dispatched: { type: integer }
+                  failed: { type: integer }
+
+  /api/v1/payslips:
+    get:
+      summary: List Payslips
+      tags: [Payslips]
+      parameters:
+        - name: payrun_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: employee_id
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PayslipSummaryOut'
+
+  /api/v1/payslips/{id}:
+    get:
+      summary: Get Payslip Detail with Full Salary Computation Breakdown
+      tags: [Payslips]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PayslipDetailOut'
+
+  /api/v1/payslips/{id}/pdf:
+    get:
+      summary: Download Payslip PDF
+      tags: [Payslips]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Printable PDF binary stream
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+
+  # ==========================================================================
+  # 6. PAYROLL DASHBOARD (Excalidraw Flow 6)
+  # ==========================================================================
+  /api/v1/dashboard/summary:
+    get:
+      summary: Top KPI Summary Cards (Role-scoped)
+      tags: [Dashboard]
+      parameters:
+        - name: period
+          in: query
+          schema: { type: string, example: "2026-09" }
+        - name: department_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: employee_type
+          in: query
+          schema: { type: string, enum: [ALL, FULL_TIME, PART_TIME, CONTRACT, INTERN, PROBATION] }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardSummaryOut'
+
+  /api/v1/dashboard/attendance-overview:
+    get:
+      summary: Attendance Status & Exception Counts
+      tags: [Dashboard]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttendanceOverviewOut'
+
+  /api/v1/dashboard/timeoff-overview:
+    get:
+      summary: Time Off Breakdown by Leave Type
+      tags: [Dashboard]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TimeOffOverviewOut'
+
+  /api/v1/dashboard/department-overview:
+    get:
+      summary: Department Headcount & Salary Costs
+      tags: [Dashboard]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DepartmentOverviewOut'
+
+  /api/v1/dashboard/salary-cost-by-department:
+    get:
+      summary: Chart Data - Salary Cost by Department
+      tags: [Dashboard]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    department: { type: string }
+                    total_salary: { type: number, format: float }
+
+  /api/v1/dashboard/monthly-net-salary-trend:
+    get:
+      summary: Chart Data - Monthly Net Salary Trend
+      tags: [Dashboard]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    month: { type: string, example: "2026-09" }
+                    net_amount: { type: number, format: float }
+
+# ============================================================================
+# COMPONENTS & SCHEMAS
+# ============================================================================
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  responses:
+    UnauthorizedError:
+      description: Authentication failed or token invalid
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+
+  schemas:
+    ErrorEnvelope:
+      type: object
+      required: [detail, code]
+      properties:
+        detail:
+          type: string
+          example: "Active contract date range overlaps an existing contract."
+        code:
+          type: string
+          example: "OVERLAPPING_CONTRACT"
+
+    TokenResponse:
+      type: object
+      required: [access_token, refresh_token, token_type]
+      properties:
+        access_token: { type: string }
+        refresh_token: { type: string }
+        token_type: { type: string, example: "bearer" }
+
+    UserResponse:
+      type: object
+      required: [id, email, role, is_active, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        emp_id: { type: string, format: uuid, nullable: true }
+        email: { type: string, format: email }
+        role:
+          type: string
+          enum: [EMPLOYEE, HR_MANAGER, HR_PAYROLL_USER, HR_PAYROLL_MANAGER, ADMIN]
+        is_active: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    UserCreateIn:
+      type: object
+      required: [email, password, role]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, format: password, minLength: 8 }
+        emp_id: { type: string, format: uuid, nullable: true }
+        role:
+          type: string
+          enum: [EMPLOYEE, HR_MANAGER, HR_PAYROLL_USER, HR_PAYROLL_MANAGER, ADMIN]
+
+    UserUpdateIn:
+      type: object
+      properties:
+        is_active: { type: boolean }
+        role:
+          type: string
+          enum: [EMPLOYEE, HR_MANAGER, HR_PAYROLL_USER, HR_PAYROLL_MANAGER, ADMIN]
+
+    EmployeeListOut:
+      type: object
+      required: [id, employee_code, first_name, last_name, work_email, job_title, department_name, status]
+      properties:
+        id: { type: string, format: uuid }
+        employee_code: { type: string, example: "EMP001" }
+        first_name: { type: string, example: "Aarav" }
+        last_name: { type: string, example: "Mehta" }
+        work_email: { type: string, example: "aarav.mehta@company.com" }
+        job_title: { type: string, example: "Payroll Specialist" }
+        department_name: { type: string, example: "Finance" }
+        status: { type: string, example: "Active" }
+
+    EmployeeDetailOut:
+      type: object
+      required: [id, employee_code, first_name, last_name, work_email, job_title, join_date, is_active]
+      properties:
+        id: { type: string, format: uuid }
+        employee_code: { type: string }
+        first_name: { type: string }
+        last_name: { type: string }
+        work_email: { type: string }
+        phone: { type: string, nullable: true }
+        job_title: { type: string }
+        employee_type: { type: string }
+        department_id: { type: string, format: uuid, nullable: true }
+        department_name: { type: string, nullable: true }
+        manager_id: { type: string, format: uuid, nullable: true }
+        join_date: { type: string, format: date }
+        is_active: { type: boolean }
+        bank_name: { type: string, nullable: true }
+        bank_account_number: { type: string, nullable: true }
+        ifsc_code: { type: string, nullable: true }
+        smart_button_counts:
+          type: object
+          properties:
+            contracts: { type: integer, example: 1 }
+            attendance: { type: integer, example: 14 }
+            timeoff: { type: integer, example: 3 }
+
+    EmployeeCreateIn:
+      type: object
+      required: [employee_code, first_name, last_name, work_email, job_title, join_date]
+      properties:
+        employee_code: { type: string }
+        first_name: { type: string }
+        last_name: { type: string }
+        work_email: { type: string }
+        job_title: { type: string }
+        department_id: { type: string, format: uuid, nullable: true }
+        employee_type: { type: string, default: "FULL_TIME" }
+        join_date: { type: string, format: date }
+        bank_name: { type: string }
+        bank_account_number: { type: string }
+        ifsc_code: { type: string }
+
+    EmployeeUpdateIn:
+      type: object
+      properties:
+        job_title: { type: string }
+        department_id: { type: string, format: uuid }
+        is_active: { type: boolean }
+        bank_name: { type: string }
+        bank_account_number: { type: string }
+        ifsc_code: { type: string }
+
+    DepartmentOut:
+      type: object
+      required: [id, name, code]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        code: { type: string }
+        manager_name: { type: string, nullable: true }
+
+    DepartmentIn:
+      type: object
+      required: [name, code]
+      properties:
+        name: { type: string }
+        code: { type: string }
+        manager_employee_id: { type: string, format: uuid, nullable: true }
+
+    ContractOut:
+      type: object
+      required: [id, reference, employee_id, start_date, wage, status]
+      properties:
+        id: { type: string, format: uuid }
+        reference: { type: string, example: "CON-2026-001" }
+        employee_id: { type: string, format: uuid }
+        employee_name: { type: string }
+        schedule_id: { type: string, format: uuid }
+        salary_structure_id: { type: string, format: uuid }
+        start_date: { type: string, format: date }
+        end_date: { type: string, format: date, nullable: true }
+        wage: { type: number, format: float, example: 50000.00 }
+        status: { type: string, enum: [DRAFT, RUNNING, EXPIRED, CANCELLED] }
+
+    ContractIn:
+      type: object
+      required: [reference, employee_id, schedule_id, salary_structure_id, start_date, wage]
+      properties:
+        reference: { type: string }
+        employee_id: { type: string, format: uuid }
+        schedule_id: { type: string, format: uuid }
+        salary_structure_id: { type: string, format: uuid }
+        start_date: { type: string, format: date }
+        end_date: { type: string, format: date, nullable: true }
+        wage: { type: number, format: float }
+        status: { type: string, default: "DRAFT" }
+
+    ScheduleOut:
+      type: object
+      required: [id, name, hours_per_week, days_per_week, lines]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, example: "Standard 40 Hours/Week" }
+        calendar_type: { type: string }
+        hours_per_week: { type: number, example: 40.0 }
+        days_per_week: { type: integer, example: 5 }
+        lines:
+          type: array
+          items:
+            type: object
+            properties:
+              day_of_week: { type: integer, example: 0 }
+              start_time: { type: string, example: "09:00:00" }
+              end_time: { type: string, example: "18:00:00" }
+              break_hours: { type: number, example: 1.0 }
+              work_hours: { type: number, example: 8.0 }
+
+    ScheduleIn:
+      type: object
+      required: [name, lines]
+      properties:
+        name: { type: string }
+        lines:
+          type: array
+          items:
+            type: object
+            required: [day_of_week, start_time, end_time, break_hours]
+            properties:
+              day_of_week: { type: integer }
+              start_time: { type: string }
+              end_time: { type: string }
+              break_hours: { type: number }
+
+    AttendanceOut:
+      type: object
+      required: [id, employee_id, date, check_in, status]
+      properties:
+        id: { type: string, format: uuid }
+        employee_id: { type: string, format: uuid }
+        employee_name: { type: string }
+        date: { type: string, format: date }
+        check_in: { type: string, format: date-time }
+        check_out: { type: string, format: date-time, nullable: true }
+        elapsed_hours: { type: number, nullable: true }
+        net_hours: { type: number, nullable: true }
+        status: { type: string, enum: [PRESENT, LATE, HALF_DAY, MISSING_CHECKOUT, OVERTIME] }
+        is_exception: { type: boolean }
+
+    AttendanceSessionOut:
+      type: object
+      required: [has_active_session]
+      properties:
+        has_active_session: { type: boolean }
+        session_id: { type: string, format: uuid, nullable: true }
+        check_in_time: { type: string, format: date-time, nullable: true }
+        elapsed_seconds: { type: integer, nullable: true }
+
+    LeaveTypeOut:
+      type: object
+      required: [id, name, code, unit, requires_allocation]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, example: "Paid Time Off" }
+        code: { type: string, example: "PTO" }
+        unit: { type: string, enum: [DAYS, HOURS] }
+        requires_allocation: { type: boolean }
+        display_color: { type: string, example: "#3B82F6" }
+
+    LeaveTypeIn:
+      type: object
+      required: [name, code]
+      properties:
+        name: { type: string }
+        code: { type: string }
+        unit: { type: string, default: "DAYS" }
+        requires_allocation: { type: boolean, default: true }
+        display_color: { type: string, default: "#3B82F6" }
+
+    AllocationOut:
+      type: object
+      required: [id, employee_id, leave_type_name, allocated_days, taken_days, remaining_days]
+      properties:
+        id: { type: string, format: uuid }
+        employee_id: { type: string, format: uuid }
+        employee_name: { type: string }
+        leave_type_name: { type: string }
+        allocated_days: { type: number }
+        taken_days: { type: number }
+        remaining_days: { type: number }
+        validity_start: { type: string, format: date }
+        validity_end: { type: string, format: date }
+        status: { type: string, enum: [DRAFT, APPROVED, REJECTED] }
+
+    AllocationIn:
+      type: object
+      required: [employee_id, leave_type_id, allocated_days, validity_start, validity_end]
+      properties:
+        employee_id: { type: string, format: uuid }
+        leave_type_id: { type: string, format: uuid }
+        allocated_days: { type: number }
+        validity_start: { type: string, format: date }
+        validity_end: { type: string, format: date }
+
+    LeaveRequestOut:
+      type: object
+      required: [id, employee_id, leave_type_name, start_date, end_date, duration_days, status]
+      properties:
+        id: { type: string, format: uuid }
+        employee_id: { type: string, format: uuid }
+        employee_name: { type: string }
+        leave_type_name: { type: string }
+        start_date: { type: string, format: date }
+        end_date: { type: string, format: date }
+        duration_days: { type: number }
+        reason: { type: string, nullable: true }
+        status: { type: string, enum: [PENDING, APPROVED, REFUSED] }
+
+    LeaveRequestIn:
+      type: object
+      required: [leave_type_id, start_date, end_date]
+      properties:
+        leave_type_id: { type: string, format: uuid }
+        start_date: { type: string, format: date }
+        end_date: { type: string, format: date }
+        reason: { type: string }
+
+    SalaryStructureOut:
+      type: object
+      required: [id, name, code, rule_count, active]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string, example: "Regular Salary Structure" }
+        code: { type: string, example: "REG_SAL" }
+        rule_count: { type: integer, example: 7 }
+        active: { type: boolean }
+
+    SalaryStructureIn:
+      type: object
+      required: [name, code]
+      properties:
+        name: { type: string }
+        code: { type: string }
+        description: { type: string }
+
+    SalaryRuleOut:
+      type: object
+      required: [id, sequence, name, code, category, computation_method]
+      properties:
+        id: { type: string, format: uuid }
+        sequence: { type: integer, example: 10 }
+        name: { type: string, example: "Basic Salary" }
+        code: { type: string, example: "BASIC" }
+        category: { type: string, enum: [BASIC, ALLOWANCE, GROSS, DEDUCTION, NET] }
+        computation_method: { type: string, enum: [FIXED, PERCENTAGE, FORMULA] }
+        amount: { type: number, nullable: true }
+        percentage: { type: number, nullable: true }
+        percentage_base_code: { type: string, nullable: true }
+        formula_expression: { type: string, nullable: true }
+
+    SalaryRuleIn:
+      type: object
+      required: [sequence, name, code, category, computation_method]
+      properties:
+        sequence: { type: integer }
+        name: { type: string }
+        code: { type: string }
+        category: { type: string, enum: [BASIC, ALLOWANCE, GROSS, DEDUCTION, NET] }
+        computation_method: { type: string, enum: [FIXED, PERCENTAGE, FORMULA] }
+        amount: { type: number, nullable: true }
+        percentage: { type: number, nullable: true }
+        percentage_base_code: { type: string, nullable: true }
+        formula_expression: { type: string, nullable: true }
+
+    PayrunPreviewIn:
+      type: object
+      required: [salary_structure_id, period_start, period_end]
+      properties:
+        salary_structure_id: { type: string, format: uuid }
+        period_start: { type: string, format: date }
+        period_end: { type: string, format: date }
+        employee_type: { type: string, default: "ALL" }
+
+    EligibleEmployeePreview:
+      type: object
+      required: [employee_id, employee_name, working_hours_per_week, contract_start_date, wage]
+      properties:
+        employee_id: { type: string, format: uuid }
+        employee_name: { type: string, example: "Aarav Mehta" }
+        department_name: { type: string, example: "Finance" }
+        working_hours_per_week: { type: number, example: 40.0 }
+        contract_start_date: { type: string, format: date }
+        wage: { type: number, example: 50000.00 }
+
+    PayrunCreateIn:
+      type: object
+      required: [name, salary_structure_id, period_start, period_end, selected_employee_ids]
+      properties:
+        name: { type: string, example: "September 2026 Regular Payroll" }
+        salary_structure_id: { type: string, format: uuid }
+        period_start: { type: string, format: date }
+        period_end: { type: string, format: date }
+        selected_employee_ids:
+          type: array
+          items: { type: string, format: uuid }
+
+    PayrunListOut:
+      type: object
+      required: [id, name, period_start, period_end, employee_count, status, warning_count]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        period_start: { type: string, format: date }
+        period_end: { type: string, format: date }
+        employee_count: { type: integer }
+        status: { type: string, enum: [DRAFT, COMPUTED, VALIDATED, PAID] }
+        warning_count: { type: integer }
+        total_net: { type: number }
+
+    PayrunDetailOut:
+      type: object
+      required: [id, name, salary_structure_name, period_start, period_end, status, employee_count, warning_count, payslips]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        salary_structure_name: { type: string }
+        period_start: { type: string, format: date }
+        period_end: { type: string, format: date }
+        status: { type: string, enum: [DRAFT, COMPUTED, VALIDATED, PAID] }
+        employee_count: { type: integer }
+        warning_count: { type: integer }
+        total_gross: { type: number }
+        total_deductions: { type: number }
+        total_net: { type: number }
+        payslips:
+          type: array
+          items:
+            $ref: '#/components/schemas/PayslipSummaryOut'
+
+    PayslipSummaryOut:
+      type: object
+      required: [id, employee_name, worked_days, basic, gross, net, status, has_warning]
+      properties:
+        id: { type: string, format: uuid }
+        employee_name: { type: string, example: "Aarav Mehta" }
+        worked_days: { type: integer, example: 22 }
+        basic: { type: number, example: 50000.00 }
+        gross: { type: number, example: 80000.00 }
+        net: { type: number, example: 75000.00 }
+        status: { type: string, enum: [Draft, Computed, Done, Paid] }
+        has_warning: { type: boolean }
+        warning_reason: { type: string, nullable: true }
+
+    PayslipDetailOut:
+      type: object
+      required: [id, employee_name, structure_name, period_start, period_end, worked_days, status, lines]
+      properties:
+        id: { type: string, format: uuid }
+        employee_name: { type: string }
+        structure_name: { type: string }
+        payrun_name: { type: string }
+        period_start: { type: string, format: date }
+        period_end: { type: string, format: date }
+        worked_days: { type: integer }
+        scheduled_days: { type: integer }
+        status: { type: string }
+        has_warning: { type: boolean }
+        warning_reason: { type: string, nullable: true }
+        lines:
+          type: array
+          items:
+            type: object
+            required: [rule_sequence, rule_name, rule_code, category, amount, total]
+            properties:
+              rule_sequence: { type: integer }
+              rule_name: { type: string }
+              rule_code: { type: string }
+              category: { type: string }
+              rate: { type: number, nullable: true }
+              quantity: { type: number }
+              amount: { type: number }
+              total: { type: number }
+
+    DashboardSummaryOut:
+      type: object
+      required: [total_net_salary_paid, payslips_generated, avg_salary_per_employee, approved_time_off_days, attendance_health]
+      properties:
+        total_net_salary_paid: { type: number, example: 900000.00 }
+        payslips_generated: { type: integer, example: 12 }
+        avg_salary_per_employee: { type: number, example: 75000.00 }
+        approved_time_off_days: { type: number, example: 5.0 }
+        attendance_health: { type: number, nullable: true, example: 96.5 }
+
+    AttendanceOverviewOut:
+      type: object
+      required: [present, late, absent, overtime, missing_checkouts]
+      properties:
+        present: { type: integer }
+        late: { type: integer }
+        absent: { type: integer }
+        overtime: { type: integer }
+        missing_checkouts: { type: integer }
+
+    TimeOffOverviewOut:
+      type: object
+      required: [leave_type, approved_days, pending_requests]
+      properties:
+        leave_type: { type: string }
+        approved_days: { type: number }
+        pending_requests: { type: integer }
+        remaining_balance: { type: number, nullable: true }
+
+    DepartmentOverviewOut:
+      type: object
+      required: [department, headcount, total_salary]
+      properties:
+        department: { type: string }
+        headcount: { type: integer }
+        total_salary: { type: number }
