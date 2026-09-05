@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from app.models.department import Department
     from app.models.job_position import JobPosition
     from app.models.schedule import WorkingSchedule
+    from app.models.time_off import TimeOffAllocation, TimeOffRequest
     from app.models.user import User
 
 
@@ -230,6 +231,20 @@ class Employee(Base):
     # 1:N relationship: employee attendance records
     attendances: Mapped[list["Attendance"]] = relationship(
         "Attendance",
+        back_populates="employee",
+        cascade="all, delete-orphan",
+    )
+
+    # 1:N relationship: employee leave allocations
+    time_off_allocations: Mapped[list["TimeOffAllocation"]] = relationship(
+        "TimeOffAllocation",
+        back_populates="employee",
+        cascade="all, delete-orphan",
+    )
+
+    # 1:N relationship: employee leave requests
+    time_off_requests: Mapped[list["TimeOffRequest"]] = relationship(
+        "TimeOffRequest",
         back_populates="employee",
         cascade="all, delete-orphan",
     )

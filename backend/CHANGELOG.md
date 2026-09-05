@@ -7,6 +7,75 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.0.5] — 2026-09-05
+
+### Summary
+Phase 5 release — **Time Off Management**.
+Introduces comprehensive leave and time-off tracking: Leave Types (`TimeOffType`), Leave Allocations (`TimeOffAllocation`), Leave Requests (`TimeOffRequest`), atomic balance deduction, FIFO grant matching, overlap prevention for pending and approved requests, row-level concurrency locking (`with_for_update()`), cancellation with balance restoration, mandatory refusal reasons, self-service leave operations, and full RBAC enforcement.
+
+### Added
+
+#### Database Models (`app/models/`)
+- `time_off.py`:
+  - `TimeOffUnit` enum (`DAYS`, `HOURS`).
+  - `AllocationStatus` enum (`DRAFT`, `APPROVED`, `ACTIVE`, `EXPIRED`, `CANCELLED`).
+  - `TimeOffRequestStatus` enum (`PENDING`, `APPROVED`, `REFUSED`, `CANCELLED`).
+  - `TimeOffType` model (`name`, `code`, `unit`, `requires_allocation`, `approval_required`, `payroll_integration`, `is_active`, timestamps).
+  - `TimeOffAllocation` model (`employee_id`, `time_off_type_id`, `allocation_quantity`, `consumed_quantity`, `valid_from`, `valid_to`, `status`, `notes`, timestamps) with derived `remaining_quantity`.
+  - `TimeOffRequest` model (`employee_id`, `time_off_type_id`, `allocation_id`, `start_date`, `end_date`, `requested_quantity`, `reason`, `status`, `approved_by`, `approved_at`, `refusal_reason`, timestamps).
+- `employee.py` — Added `time_off_allocations` and `time_off_requests` relationships.
+- `app/db/base.py` — Registered `time_off` in Base metadata.
+
+#### Database Migrations (`alembic/versions/`)
+- `0005_create_time_off_tables.py` — Migration creating PostgreSQL enums (`timeoffunit`, `allocationstatus`, `timeoffrequeststatus`), tables `time_off_types`, `time_off_allocations`, `time_off_requests` with foreign keys and indexes, and seeded default leave types (`PTO`, `SICK`, `UNPAID`).
+
+#### Pydantic Schemas (`app/schemas/`)
+- `time_off.py`:
+  - `TimeOffTypeCreate`, `TimeOffTypeUpdate`, `TimeOffTypeResponse`, `TimeOffTypeListResponse`.
+  - `TimeOffAllocationCreate`, `TimeOffAllocationUpdate`, `TimeOffAllocationResponse`, `TimeOffAllocationListResponse`.
+  - `TimeOffRequestCreate`, `TimeOffRequestUpdate`, `TimeOffRequestRefuse`, `TimeOffRequestResponse`, `TimeOffRequestListResponse`.
+  - `TimeOffBalanceItem`, `TimeOffBalanceResponse`.
+
+#### Service Layer (`app/services/`)
+- `time_off_type_service.py` — CRUD operations, uppercase code normalization, soft deactivation with pending request protection.
+- `time_off_allocation_service.py` — Allocation grant creation, date validation (`valid_to >= valid_from`), update protection against reducing below consumed amount, cancellation with non-zero consumption protection, FIFO eligible grant lookup (`find_eligible_allocations`), and aggregated leave balances per type (`get_employee_balances`).
+- `time_off_request_service.py` — Leave duration computation (`DAYS` inclusive counting vs `HOURS` standard workday), overlap validation blocking overlapping `PENDING` or `APPROVED` requests (`check_overlapping_requests`), atomic approval with row-level locking (`with_for_update()`), refusal with mandatory explanation, and cancellation with atomic balance restoration.
+
+#### API Routers (`app/api/`)
+- `time_off.py` — Mounted at `/api/v1/time-off` and alias `/api/v1/timeoff`:
+  - `GET /api/v1/time-off/types` — List active leave types.
+  - `POST /api/v1/time-off/types` — Create leave type (HR/Admin).
+  - `GET /api/v1/time-off/types/{id}` — Get leave type details.
+  - `PATCH /api/v1/time-off/types/{id}` — Update leave type (HR/Admin).
+  - `DELETE /api/v1/time-off/types/{id}` — Soft-deactivate leave type (HR/Admin).
+  - `GET /api/v1/time-off/allocations` — List allocations (HR sees all, employee sees own).
+  - `POST /api/v1/time-off/allocations` — Grant leave allocation (HR/Admin).
+  - `GET /api/v1/time-off/allocations/{id}` — Get allocation details.
+  - `PATCH /api/v1/time-off/allocations/{id}` — Update allocation (HR/Admin).
+  - `DELETE /api/v1/time-off/allocations/{id}` — Cancel allocation (HR/Admin).
+  - `GET /api/v1/time-off/requests` — List leave requests with filters (HR sees all, employee sees own).
+  - `POST /api/v1/time-off/requests` — Submit leave request.
+  - `GET /api/v1/time-off/requests/{id}` — Get request details.
+  - `PATCH /api/v1/time-off/requests/{id}` — Update pending request (own only).
+  - `POST /api/v1/time-off/requests/{id}/approve` — Approve request with atomic lock (HR/Admin, non-self).
+  - `POST /api/v1/time-off/requests/{id}/refuse` — Refuse request with mandatory reason (HR/Admin, non-self).
+  - `POST /api/v1/time-off/requests/{id}/cancel` — Cancel request and restore balance.
+  - `GET /api/v1/time-off/balances` — Query leave balances.
+- `employees.py`:
+  - `GET /api/v1/employees/me/time-off/allocations` — Self-service leave allocations.
+  - `GET /api/v1/employees/me/time-off/requests` — Self-service leave requests.
+  - `POST /api/v1/employees/me/time-off/requests` — Self-service leave request submission.
+  - `GET /api/v1/employees/me/time-off/balances` — Self-service leave balances.
+  - `GET /api/v1/employees/{id}/time-off/allocations` — Employee allocations (HR/Admin or own).
+  - `GET /api/v1/employees/{id}/time-off/requests` — Employee requests (HR/Admin or own).
+  - `GET /api/v1/employees/{id}/time-off/balances` — Employee balances (HR/Admin or own).
+
+#### Tests (`tests/`)
+- `test_time_off.py` — 35 comprehensive unit and integration tests covering leave types, allocations, requests, Scenario 32 (exact balance deduction), Scenario 33 (unpaid leave no allocation), Scenario 34 (request overlap prevention), Scenario 36 (concurrency row-level locking), balance restoration upon cancellation, mandatory refusal reason, self-approval prevention, cross-employee security, and full RBAC matrix.
+- Total test suite now stands at 131 tests passing across Phases 1 through 5.
+
+---
+
 ## [0.0.4] — 2026-09-05
 
 ### Summary

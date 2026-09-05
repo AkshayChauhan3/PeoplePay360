@@ -14,10 +14,10 @@ from app.api import (
     job_positions,
     roles,
     schedules,
+    time_off,
 )
 from app.core.config import settings
 from app.db.database import AsyncSessionLocal
-from app.services import role_service
 from app.services import role_service, schedule_service
 
 # ---------------------------------------------------------------------------
@@ -27,7 +27,6 @@ from app.services import role_service, schedule_service
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Lifecycle manager: seed initial system roles on startup."""
     """Lifecycle manager: seed initial system roles & default working schedule on startup."""
     async with AsyncSessionLocal() as session:
         await role_service.seed_default_roles(session)
@@ -42,7 +41,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="PeoplePay360 API",
-    description="HR & Payroll Backend — Phase 4: Attendance Management",
+    description="HR & Payroll Backend — Phase 5: Time Off Management",
     version=settings.app_version,
     docs_url="/docs",
     redoc_url="/redoc",
@@ -77,6 +76,8 @@ app.include_router(employees.router, prefix=API_PREFIX)
 app.include_router(contracts.router, prefix=API_PREFIX)
 app.include_router(schedules.router, prefix=API_PREFIX)
 app.include_router(attendance.router, prefix=API_PREFIX)
+app.include_router(time_off.router, prefix=f"{API_PREFIX}/time-off")
+app.include_router(time_off.router, prefix=f"{API_PREFIX}/timeoff")
 
 # ---------------------------------------------------------------------------
 # Global exception handlers

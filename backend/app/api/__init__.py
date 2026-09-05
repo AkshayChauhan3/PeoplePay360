@@ -1,4 +1,3 @@
-from app.api import auth, departments, employees, health, job_positions, roles
 from app.api import (
     attendance,
     auth,
@@ -9,6 +8,7 @@ from app.api import (
     job_positions,
     roles,
     schedules,
+    time_off,
 )
 
 __all__ = [
@@ -21,5 +21,6 @@ __all__ = [
     "job_positions",
     "roles",
     "schedules",
+    "time_off",
 ]
 

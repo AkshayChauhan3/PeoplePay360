@@ -1,7 +1,7 @@
 [project]
 name = "peoplepay360"
-version = "0.0.4"
-description = "PeoplePay360 — HR & Payroll Backend (v0.0.4: Attendance Management)"
+version = "0.0.5"
+description = "PeoplePay360 — HR & Payroll Backend (v0.0.5: Time Off Management)"
 authors = [{ name = "PeoplePay360 Team" }]
 requires-python = ">=3.12"
 

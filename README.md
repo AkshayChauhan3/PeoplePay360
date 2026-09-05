@@ -50,6 +50,8 @@ PeoplePay360/
 | [v0.0.2](backend/CHANGELOG.md) | Employee Master & HR Master Data (Roles, Departments, Job Positions, Employees) |
 | [v0.0.3](backend/CHANGELOG.md) | Employment Contracts & Lifecycle Management |
 | [v0.0.4](backend/CHANGELOG.md) | Attendance Management & Working Schedules |
+| [v0.0.5](backend/CHANGELOG.md) | Time Off Management (Leave Types, Allocations, Requests, Balances) |
+
 
 ## Getting Started
 

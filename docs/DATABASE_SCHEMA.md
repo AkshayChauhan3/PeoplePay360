@@ -1,6 +1,6 @@
 # PeoplePay360 — Database Schema & RBAC Permissions Reference
 
-**Version**: `0.0.4` (Phase 4: Attendance Management & Working Schedules)  
+**Version**: `0.0.5` (Phase 5: Time Off Management)  
 **Database**: PostgreSQL 18+ (Async engine via `asyncpg`)  
 **ORM**: SQLAlchemy 2.x  
 **Migration Tool**: Alembic  
@@ -22,6 +22,11 @@ erDiagram
     WORKING_SCHEDULES ||--o{ WORKING_SCHEDULE_DAYS : "contains"
     WORKING_SCHEDULES ||--o{ EMPLOYEES : "governs (working_schedule_id)"
     EMPLOYEES ||--o{ ATTENDANCES : "records"
+    TIME_OFF_TYPES ||--o{ TIME_OFF_ALLOCATIONS : "defines"
+    TIME_OFF_TYPES ||--o{ TIME_OFF_REQUESTS : "categorizes"
+    EMPLOYEES ||--o{ TIME_OFF_ALLOCATIONS : "receives"
+    EMPLOYEES ||--o{ TIME_OFF_REQUESTS : "submits"
+    TIME_OFF_ALLOCATIONS ||--o{ TIME_OFF_REQUESTS : "consumed by"
 
     ROLES {
         int id PK "autoincrement"
@@ -129,6 +134,51 @@ erDiagram
         int role_id FK "-> roles.id"
         int employee_id FK "-> employees.id (1:1 UNIQUE, nullable)"
         boolean is_active "default true"
+        timestamptz created_at "default now()"
+        timestamptz updated_at "default now()"
+    }
+
+    TIME_OFF_TYPES {
+        int id PK "autoincrement"
+        varchar name UK "e.g. Paid Time Off"
+        varchar code UK "normalized uppercase e.g. PTO"
+        timeoffunit unit "DAYS, HOURS"
+        boolean requires_allocation "default true"
+        boolean approval_required "default true"
+        boolean payroll_integration "default true"
+        varchar color "hex color code e.g. #2196f3"
+        boolean is_active "default true"
+        timestamptz created_at "default now()"
+        timestamptz updated_at "default now()"
+    }
+
+    TIME_OFF_ALLOCATIONS {
+        int id PK "autoincrement"
+        int employee_id FK "-> employees.id"
+        int time_off_type_id FK "-> time_off_types.id"
+        numeric allocation_quantity "precision 6, scale 2"
+        numeric consumed_quantity "precision 6, scale 2, default 0.00"
+        date valid_from
+        date valid_to
+        allocationstatus status "DRAFT, APPROVED, ACTIVE, EXPIRED, CANCELLED"
+        varchar notes "nullable"
+        timestamptz created_at "default now()"
+        timestamptz updated_at "default now()"
+    }
+
+    TIME_OFF_REQUESTS {
+        int id PK "autoincrement"
+        int employee_id FK "-> employees.id"
+        int time_off_type_id FK "-> time_off_types.id"
+        int allocation_id FK "-> time_off_allocations.id (nullable)"
+        date start_date
+        date end_date
+        numeric requested_quantity "precision 6, scale 2"
+        varchar reason "nullable"
+        timeoffrequeststatus status "PENDING, APPROVED, REFUSED, CANCELLED"
+        int approved_by FK "-> users.id (nullable)"
+        timestamptz approved_at "nullable"
+        varchar refusal_reason "nullable"
         timestamptz created_at "default now()"
         timestamptz updated_at "default now()"
     }
@@ -325,6 +375,83 @@ Daily employee time tracking, check-in/out records, and calculated work variance
 
 ---
 
+### 2.8. `time_off_types` Table
+Configurable master leave types (e.g. Paid Time Off, Sick Leave, Unpaid Leave).
+
+| Column | Type | Nullable | Default | Constraints | Description |
+|---|---|---|---|---|---|
+| `id` | `INTEGER` | `NO` | *autoincrement* | `PRIMARY KEY` | Unique leave type ID |
+| `name` | `VARCHAR(100)` | `NO` | — | `UNIQUE`, `INDEXED` | Descriptive leave type name |
+| `code` | `VARCHAR(50)` | `NO` | — | `UNIQUE`, `INDEXED` | Normalized uppercase code (e.g. `PTO`, `SICK`) |
+| `unit` | `timeoffunit` | `NO` | `'DAYS'` | — | Unit of measurement: `DAYS` or `HOURS` |
+| `requires_allocation` | `BOOLEAN` | `NO` | `true` | — | If true, employee must have valid grant with balance |
+| `approval_required` | `BOOLEAN` | `NO` | `true` | — | If true, request requires manager/HR approval |
+| `payroll_integration` | `BOOLEAN` | `NO` | `true` | — | If true, affects payroll calculations in future phase |
+| `color` | `VARCHAR(7)` | `YES` | `NULL` | — | Hex color code for calendar UI rendering |
+| `is_active` | `BOOLEAN` | `NO` | `true` | — | Soft deactivation flag |
+| `created_at` | `TIMESTAMPTZ` | `NO` | `now()` | — | Creation timestamp (UTC) |
+| `updated_at` | `TIMESTAMPTZ` | `NO` | `now()` | — | Update timestamp (UTC) |
+
+#### Custom PostgreSQL Enum: `timeoffunit`
+- `DAYS`: Daily unit leave tracking.
+- `HOURS`: Hourly unit leave tracking (e.g. Comp Time).
+
+---
+
+### 2.9. `time_off_allocations` Table
+Periodic leave grants assigned to employees.
+
+| Column | Type | Nullable | Default | Constraints | Description |
+|---|---|---|---|---|---|
+| `id` | `INTEGER` | `NO` | *autoincrement* | `PRIMARY KEY` | Unique allocation grant ID |
+| `employee_id` | `INTEGER` | `NO` | — | `FK -> employees.id (RESTRICT)` | Target employee |
+| `time_off_type_id` | `INTEGER` | `NO` | — | `FK -> time_off_types.id (RESTRICT)` | Leave type granted |
+| `allocation_quantity` | `NUMERIC(6, 2)` | `NO` | — | — | Total quantity granted (days or hours) |
+| `consumed_quantity` | `NUMERIC(6, 2)` | `NO` | `0.00` | — | Total quantity consumed by approved leave |
+| `valid_from` | `DATE` | `NO` | — | `INDEXED` | Grant validity start date |
+| `valid_to` | `DATE` | `NO` | — | `INDEXED` | Grant validity end date (must be >= valid_from) |
+| `status` | `allocationstatus` | `NO` | `'ACTIVE'` | `INDEXED` | Allocation lifecycle status |
+| `notes` | `VARCHAR(255)` | `YES` | `NULL` | — | Administrative grant notes |
+| `created_at` | `TIMESTAMPTZ` | `NO` | `now()` | — | Creation timestamp (UTC) |
+| `updated_at` | `TIMESTAMPTZ` | `NO` | `now()` | — | Update timestamp (UTC) |
+
+#### Custom PostgreSQL Enum: `allocationstatus`
+- `DRAFT`: Draft allocation grant pending confirmation.
+- `APPROVED`: Confirmed grant ready for activation.
+- `ACTIVE`: Currently active grant eligible for leave consumption.
+- `EXPIRED`: Validity period ended.
+- `CANCELLED`: Cancelled grant (only allowed if consumed_quantity = 0).
+
+---
+
+### 2.10. `time_off_requests` Table
+Employee leave requests, approvals, refusals, and balance consumption.
+
+| Column | Type | Nullable | Default | Constraints | Description |
+|---|---|---|---|---|---|
+| `id` | `INTEGER` | `NO` | *autoincrement* | `PRIMARY KEY` | Unique leave request ID |
+| `employee_id` | `INTEGER` | `NO` | — | `FK -> employees.id (CASCADE)` | Submitting employee |
+| `time_off_type_id` | `INTEGER` | `NO` | — | `FK -> time_off_types.id (RESTRICT)` | Leave type requested |
+| `allocation_id` | `INTEGER` | `YES` | `NULL` | `FK -> time_off_allocations.id (SET NULL)` | Resolved allocation grant |
+| `start_date` | `DATE` | `NO` | — | `INDEXED` | First day of leave |
+| `end_date` | `DATE` | `NO` | — | `INDEXED` | Last day of leave (must be >= start_date) |
+| `requested_quantity` | `NUMERIC(6, 2)` | `NO` | — | — | Total days or hours requested |
+| `reason` | `VARCHAR(255)` | `YES` | `NULL` | — | Employee explanation/justification |
+| `status` | `timeoffrequeststatus` | `NO` | `'PENDING'` | `INDEXED` | Request lifecycle status |
+| `approved_by` | `INTEGER` | `YES` | `NULL` | `FK -> users.id (SET NULL)` | User who approved/refused |
+| `approved_at` | `TIMESTAMPTZ` | `YES` | `NULL` | — | Approval/refusal timestamp |
+| `refusal_reason` | `VARCHAR(255)` | `YES` | `NULL` | — | Mandatory explanation when refused |
+| `created_at` | `TIMESTAMPTZ` | `NO` | `now()` | — | Creation timestamp (UTC) |
+| `updated_at` | `TIMESTAMPTZ` | `NO` | `now()` | — | Update timestamp (UTC) |
+
+#### Custom PostgreSQL Enum: `timeoffrequeststatus`
+- `PENDING`: Awaiting approval; blocks conflicting overlapping dates.
+- `APPROVED`: Approved by HR/Admin; deducted from allocation via atomic row lock.
+- `REFUSED`: Rejected with mandatory refusal reason; frees blocked dates.
+- `CANCELLED`: Cancelled by employee or HR; restores consumed balance.
+
+---
+
 ## 3. RBAC Permissions Matrix
 
 Access control is enforced at the route level using FastAPI dependency injection (`require_role(...)`).
@@ -383,6 +510,34 @@ Access control is enforced at the route level using FastAPI dependency injection
 | `/api/v1/attendance/{id}` | `DELETE` | Delete attendance record | ❌ `403` | ❌ `403` | ✅ | ✅ | ✅ |
 | `/api/v1/employees/me/attendance` | `GET` | View own attendance history | ✅ *(if linked)* | ✅ | ✅ | ✅ | ✅ |
 | `/api/v1/employees/{id}/attendance` | `GET` | View employee attendance history | ✅ *(own only)* | ✅ | ✅ | ✅ | ✅ |
+| **Time Off Types** | | | | | | | |
+| `/api/v1/time-off/types` | `GET` | List leave types | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `/api/v1/time-off/types` | `POST` | Create leave type | ❌ `403` | ❌ `403` | ✅ | ✅ | ✅ |
+| `/api/v1/time-off/types/{id}` | `GET` | Get leave type details | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `/api/v1/time-off/types/{id}` | `PATCH` | Update leave type | ❌ `403` | ❌ `403` | ✅ | ✅ | ✅ |
+| `/api/v1/time-off/types/{id}` | `DELETE` | Soft-deactivate leave type | ❌ `403` | ❌ `403` | ✅ | ✅ | ✅ |
+| **Time Off Allocations** | | | | | | | |
+| `/api/v1/time-off/allocations` | `GET` | List allocations | ✅ *(own only)* | ✅ | ✅ | ✅ | ✅ |
+| `/api/v1/time-off/allocations` | `POST` | Grant leave allocation | ❌ `403` | ❌ `403` | ✅ | ✅ | ✅ |
+| `/api/v1/time-off/allocations/{id}` | `GET` | Get allocation details | ✅ *(own only)* | ✅ | ✅ | ✅ | ✅ |
+| `/api/v1/time-off/allocations/{id}` | `PATCH` | Update allocation grant | ❌ `403` | ❌ `403` | ✅ | ✅ | ✅ |
+| `/api/v1/time-off/allocations/{id}` | `DELETE` | Cancel allocation grant | ❌ `403` | ❌ `403` | ✅ | ✅ | ✅ |
+| **Time Off Requests & Balances** | | | | | | | |
+| `/api/v1/time-off/requests` | `GET` | List leave requests | ✅ *(own only)* | ✅ | ✅ | ✅ | ✅ |
+| `/api/v1/time-off/requests` | `POST` | Submit leave request | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `/api/v1/time-off/requests/{id}` | `GET` | Get request details | ✅ *(own only)* | ✅ | ✅ | ✅ | ✅ |
+| `/api/v1/time-off/requests/{id}` | `PATCH` | Update pending request | ✅ *(own only)* | ✅ | ✅ | ✅ | ✅ |
+| `/api/v1/time-off/requests/{id}/approve` | `POST` | Approve leave (atomic lock) | ❌ `403` | ❌ `403` | ✅ *(not own)* | ✅ *(not own)* | ✅ |
+| `/api/v1/time-off/requests/{id}/refuse` | `POST` | Refuse leave request | ❌ `403` | ❌ `403` | ✅ *(not own)* | ✅ *(not own)* | ✅ |
+| `/api/v1/time-off/requests/{id}/cancel` | `POST` | Cancel leave request | ✅ *(own only)* | ✅ | ✅ | ✅ | ✅ |
+| `/api/v1/time-off/balances` | `GET` | Query leave balances | ✅ *(own only)* | ✅ | ✅ | ✅ | ✅ |
+| `/api/v1/employees/me/time-off/allocations` | `GET` | View own allocations | ✅ *(if linked)* | ✅ | ✅ | ✅ | ✅ |
+| `/api/v1/employees/me/time-off/requests` | `GET` | View own requests | ✅ *(if linked)* | ✅ | ✅ | ✅ | ✅ |
+| `/api/v1/employees/me/time-off/requests` | `POST` | Submit own request | ✅ *(if linked)* | ✅ | ✅ | ✅ | ✅ |
+| `/api/v1/employees/me/time-off/balances` | `GET` | View own leave balances | ✅ *(if linked)* | ✅ | ✅ | ✅ | ✅ |
+| `/api/v1/employees/{id}/time-off/allocations` | `GET` | View employee allocations | ✅ *(own only)* | ✅ | ✅ | ✅ | ✅ |
+| `/api/v1/employees/{id}/time-off/requests` | `GET` | View employee requests | ✅ *(own only)* | ✅ | ✅ | ✅ | ✅ |
+| `/api/v1/employees/{id}/time-off/balances` | `GET` | View employee balances | ✅ *(own only)* | ✅ | ✅ | ✅ | ✅ |
 
 ---
 
@@ -442,5 +597,30 @@ Access control is enforced at the route level using FastAPI dependency injection
 12. **Audit Trail for Manual HR Modifications**:
     - Any manual creation (`POST /api/v1/attendance`) or update (`PATCH /api/v1/attendance/{id}`) by HR automatically sets `is_manual_edit = true`.
     - Requires a non-empty `correction_reason`. Attempting a manual correction without providing a reason is rejected with `422 Unprocessable Content`.
+
+13. **Time Off Allocation Lifecycle & Validity Tracking**:
+    - Allocations define granted leave allowance with `allocation_quantity`, `consumed_quantity`, and derived `remaining_quantity`.
+    - Status lifecycle: `DRAFT` -> `APPROVED` -> `ACTIVE` -> `EXPIRED` / `CANCELLED`.
+    - Date constraints require `valid_to >= valid_from`.
+    - Updates cannot reduce `allocation_quantity` below `consumed_quantity` (`400 Bad Request`).
+    - Allocation cancellation/deletion is blocked if any portion has already been consumed (`400 Bad Request`).
+
+14. **Exact Leave Balance Deduction & FIFO Grant Matching**:
+    - For leave types requiring allocation (`requires_allocation = true`), requests are matched against eligible active allocations where `valid_from <= start_date` and `valid_to >= end_date` with `remaining_quantity > 0`, prioritized by earliest expiry (`valid_from` ASC).
+    - If the employee's available remaining balance is insufficient for `requested_quantity`, the request is rejected with `400 Bad Request`.
+    - Non-allocated leave types (e.g. `UNPAID`) bypass allocation checks and balance decrements.
+
+15. **Time Off Overlap Prevention**:
+    - An employee cannot have overlapping time off requests in `PENDING` or `APPROVED` status.
+    - Submitting or updating a request to dates that intersect an existing active request returns `409 Conflict`.
+    - `REFUSED` and `CANCELLED` requests are excluded from overlap checks.
+
+16. **Concurrency Row-Level Locking (`with_for_update`) & Balance Restoration**:
+    - Approval workflows use PostgreSQL row-level locks (`SELECT ... FOR UPDATE`) on allocations to eliminate race conditions under concurrent requests.
+    - Upon approval, `consumed_quantity` is atomically incremented by `requested_quantity`.
+    - If an approved request is cancelled, `consumed_quantity` is atomically decremented by `requested_quantity`, immediately restoring the employee's balance.
+    - Refusals require a non-empty `refusal_reason` (`400 Bad Request`).
+    - Self-approval is strictly forbidden: managers and HR cannot approve or refuse their own leave requests (`400 Bad Request`).
+
 
 

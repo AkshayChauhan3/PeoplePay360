@@ -35,6 +35,20 @@ from app.schemas.schedule import (
     ScheduleLineOut,
     ScheduleOut,
 )
+from app.schemas.time_off import (
+    TimeOffAllocationCreate,
+    TimeOffAllocationResponse,
+    TimeOffAllocationUpdate,
+    TimeOffBalanceItem,
+    TimeOffBalanceResponse,
+    TimeOffRequestCreate,
+    TimeOffRequestRefuse,
+    TimeOffRequestResponse,
+    TimeOffRequestUpdate,
+    TimeOffTypeCreate,
+    TimeOffTypeResponse,
+    TimeOffTypeUpdate,
+)
 from app.schemas.user import UserCreate, UserResponse
 
 __all__ = [
@@ -70,6 +84,18 @@ __all__ = [
     "ScheduleLineIn",
     "ScheduleLineOut",
     "ScheduleOut",
+    "TimeOffAllocationCreate",
+    "TimeOffAllocationResponse",
+    "TimeOffAllocationUpdate",
+    "TimeOffBalanceItem",
+    "TimeOffBalanceResponse",
+    "TimeOffRequestCreate",
+    "TimeOffRequestRefuse",
+    "TimeOffRequestResponse",
+    "TimeOffRequestUpdate",
+    "TimeOffTypeCreate",
+    "TimeOffTypeResponse",
+    "TimeOffTypeUpdate",
     "TokenPayload",
     "TokenResponse",
     "UserCreate",

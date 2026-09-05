@@ -7,6 +7,9 @@ from app.services import (
     job_position_service,
     role_service,
     schedule_service,
+    time_off_allocation_service,
+    time_off_request_service,
+    time_off_type_service,
     user_service,
 )
 
@@ -19,6 +22,9 @@ __all__ = [
     "job_position_service",
     "role_service",
     "schedule_service",
+    "time_off_allocation_service",
+    "time_off_request_service",
+    "time_off_type_service",
     "user_service",
 ]
 

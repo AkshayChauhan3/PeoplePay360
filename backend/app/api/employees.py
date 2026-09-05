@@ -21,7 +21,8 @@ from app.dependencies.auth import (
 from app.models.attendance import AttendanceStatus
 from app.models.contract import Contract
 from app.models.employee import Employee, EmployeeStatus
-from app.models.user import User
+from app.models.time_off import AllocationStatus, TimeOffRequestStatus
+from app.models.user import User, UserRole
 from app.schemas.attendance import AttendanceListResponse, AttendanceResponse
 from app.schemas.contract import ContractResponse
 from app.schemas.employee import (
@@ -30,10 +31,28 @@ from app.schemas.employee import (
     EmployeeUpdate,
     LinkUserRequest,
 )
-from app.services import contract_service, employee_service
-from app.services import attendance_service, contract_service, employee_service
+from app.schemas.time_off import (
+    TimeOffAllocationResponse,
+    TimeOffBalanceResponse,
+    TimeOffRequestCreate,
+    TimeOffRequestResponse,
+)
+from app.services import (
+    attendance_service,
+    contract_service,
+    employee_service,
+    time_off_allocation_service,
+    time_off_request_service,
+)
 
 router = APIRouter(prefix="/employees", tags=["Employees"])
+
+_HR_ROLES = {
+    UserRole.ADMIN.value,
+    UserRole.HR_MANAGER.value,
+    UserRole.HR_PAYROLL_USER.value,
+    UserRole.HR_PAYROLL_MANAGER.value,
+}
 
 
 def _format_att(att) -> AttendanceResponse:
@@ -188,6 +207,120 @@ async def get_my_attendance(
         skip=skip,
         limit=limit,
     )
+
+
+# ---------------------------------------------------------------------------
+# 3c. Self-Service Current Employee Time Off Allocations
+# ---------------------------------------------------------------------------
+@router.get(
+    "/me/time-off/allocations",
+    response_model=list[TimeOffAllocationResponse],
+    summary="Get current logged-in employee time off allocations",
+)
+async def get_my_time_off_allocations(
+    time_off_type_id: int | None = Query(None, description="Filter by leave type ID"),
+    status_filter: AllocationStatus | None = Query(None, alias="status", description="Filter by allocation status"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[TimeOffAllocationResponse]:
+    """List all leave allocations for the currently authenticated employee."""
+    if current_user.employee_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current user account is not linked to an employee profile.",
+        )
+    return await time_off_allocation_service.list_allocations(
+        db=db,
+        employee_id=current_user.employee_id,
+        time_off_type_id=time_off_type_id,
+        status_filter=status_filter,
+        skip=skip,
+        limit=limit,
+    )
+
+
+# ---------------------------------------------------------------------------
+# 3d. Self-Service Current Employee Time Off Requests
+# ---------------------------------------------------------------------------
+@router.get(
+    "/me/time-off/requests",
+    response_model=list[TimeOffRequestResponse],
+    summary="Get current logged-in employee time off requests",
+)
+async def get_my_time_off_requests(
+    time_off_type_id: int | None = Query(None, description="Filter by leave type ID"),
+    status_filter: TimeOffRequestStatus | None = Query(None, alias="status", description="Filter by request status"),
+    from_date: date | None = Query(None, description="Filter requests ending on or after this date"),
+    to_date: date | None = Query(None, description="Filter requests starting on or before this date"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[TimeOffRequestResponse]:
+    """List all leave requests for the currently authenticated employee."""
+    if current_user.employee_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current user account is not linked to an employee profile.",
+        )
+    return await time_off_request_service.list_requests(
+        db=db,
+        employee_id=current_user.employee_id,
+        time_off_type_id=time_off_type_id,
+        status_filter=status_filter,
+        from_date=from_date,
+        to_date=to_date,
+        skip=skip,
+        limit=limit,
+    )
+
+
+@router.post(
+    "/me/time-off/requests",
+    response_model=TimeOffRequestResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Submit leave request for current logged-in employee",
+)
+async def create_my_time_off_request(
+    data: TimeOffRequestCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> TimeOffRequestResponse:
+    """Submit a new leave request for the currently authenticated employee."""
+    if current_user.employee_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current user account is not linked to an employee profile.",
+        )
+    return await time_off_request_service.create_request(
+        db=db,
+        employee_id=current_user.employee_id,
+        data=data,
+        current_user=current_user,
+    )
+
+
+# ---------------------------------------------------------------------------
+# 3e. Self-Service Current Employee Time Off Balances
+# ---------------------------------------------------------------------------
+@router.get(
+    "/me/time-off/balances",
+    response_model=TimeOffBalanceResponse,
+    summary="Get current logged-in employee time off balances",
+)
+async def get_my_time_off_balances(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> TimeOffBalanceResponse:
+    """Calculate and return aggregated leave balances for the currently authenticated employee."""
+    if current_user.employee_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current user account is not linked to an employee profile.",
+        )
+    return await time_off_allocation_service.get_employee_balances(db, current_user.employee_id)
 
 
 # ---------------------------------------------------------------------------
@@ -354,3 +487,108 @@ async def get_employee_attendance(
         skip=skip,
         limit=limit,
     )
+
+
+# ---------------------------------------------------------------------------
+# 10. Employee Time Off Allocations
+# ---------------------------------------------------------------------------
+@router.get(
+    "/{employee_id}/time-off/allocations",
+    response_model=list[TimeOffAllocationResponse],
+    summary="Get all time off allocations for an employee",
+)
+async def get_employee_time_off_allocations(
+    employee_id: int,
+    time_off_type_id: int | None = Query(None, description="Filter by leave type ID"),
+    status_filter: AllocationStatus | None = Query(None, alias="status", description="Filter by allocation status"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[TimeOffAllocationResponse]:
+    """
+    List all leave allocations for a specific employee.
+    Allowed for HR/Admin, or the employee themselves.
+    """
+    is_hr = current_user.role_name in _HR_ROLES
+    if not is_hr and current_user.employee_id != employee_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to view allocations for other employees.",
+        )
+    return await time_off_allocation_service.list_allocations(
+        db=db,
+        employee_id=employee_id,
+        time_off_type_id=time_off_type_id,
+        status_filter=status_filter,
+        skip=skip,
+        limit=limit,
+    )
+
+
+# ---------------------------------------------------------------------------
+# 11. Employee Time Off Requests
+# ---------------------------------------------------------------------------
+@router.get(
+    "/{employee_id}/time-off/requests",
+    response_model=list[TimeOffRequestResponse],
+    summary="Get all time off requests for an employee",
+)
+async def get_employee_time_off_requests(
+    employee_id: int,
+    time_off_type_id: int | None = Query(None, description="Filter by leave type ID"),
+    status_filter: TimeOffRequestStatus | None = Query(None, alias="status", description="Filter by request status"),
+    from_date: date | None = Query(None, description="Filter requests ending on or after this date"),
+    to_date: date | None = Query(None, description="Filter requests starting on or before this date"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[TimeOffRequestResponse]:
+    """
+    List all leave requests for a specific employee.
+    Allowed for HR/Admin, or the employee themselves.
+    """
+    is_hr = current_user.role_name in _HR_ROLES
+    if not is_hr and current_user.employee_id != employee_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to view leave requests for other employees.",
+        )
+    return await time_off_request_service.list_requests(
+        db=db,
+        employee_id=employee_id,
+        time_off_type_id=time_off_type_id,
+        status_filter=status_filter,
+        from_date=from_date,
+        to_date=to_date,
+        skip=skip,
+        limit=limit,
+    )
+
+
+# ---------------------------------------------------------------------------
+# 12. Employee Time Off Balances
+# ---------------------------------------------------------------------------
+@router.get(
+    "/{employee_id}/time-off/balances",
+    response_model=TimeOffBalanceResponse,
+    summary="Get employee leave balances",
+)
+async def get_employee_time_off_balances(
+    employee_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> TimeOffBalanceResponse:
+    """
+    Calculate and return aggregated leave balances for a specific employee.
+    Allowed for HR/Admin, or the employee themselves.
+    """
+    is_hr = current_user.role_name in _HR_ROLES
+    if not is_hr and current_user.employee_id != employee_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to view leave balances for other employees.",
+        )
+    return await time_off_allocation_service.get_employee_balances(db, employee_id)
+

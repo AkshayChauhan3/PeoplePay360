@@ -21,5 +21,6 @@ from app.models import (  # noqa: F401, E402
     job_position as _job_position_model,
     role as _role_model,
     schedule as _schedule_model,
+    time_off as _time_off_model,
     user as _user_model,
 )

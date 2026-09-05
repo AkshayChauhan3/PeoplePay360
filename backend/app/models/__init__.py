@@ -5,9 +5,18 @@ from app.models.employee import Employee, EmployeeStatus
 from app.models.job_position import JobPosition
 from app.models.role import Role
 from app.models.schedule import WorkingSchedule, WorkingScheduleDay
+from app.models.time_off import (
+    AllocationStatus,
+    TimeOffAllocation,
+    TimeOffRequest,
+    TimeOffRequestStatus,
+    TimeOffType,
+    TimeOffUnit,
+)
 from app.models.user import User, UserRole
 
 __all__ = [
+    "AllocationStatus",
     "Attendance",
     "AttendanceStatus",
     "Contract",
@@ -17,6 +26,11 @@ __all__ = [
     "EmployeeStatus",
     "JobPosition",
     "Role",
+    "TimeOffAllocation",
+    "TimeOffRequest",
+    "TimeOffRequestStatus",
+    "TimeOffType",
+    "TimeOffUnit",
     "User",
     "UserRole",
     "WorkingSchedule",
