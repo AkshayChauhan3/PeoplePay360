@@ -2,22 +2,26 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from jose import JWTError, jwt
-import bcrypt
+from passlib.context import CryptContext
 
 from app.core.config import settings
 from app.schemas.auth import TokenPayload
+
+# ---------------------------------------------------------------------------
 # Password hashing
 # ---------------------------------------------------------------------------
 
+_pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+
 def hash_password(plain_password: str) -> str:
     """Return a bcrypt hash of the given plaintext password."""
-    salt = bcrypt.gensalt()
-    return bcrypt.hashpw(plain_password.encode('utf-8'), salt).decode('utf-8')
+    return _pwd_context.hash(plain_password)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Return True if the plaintext password matches the stored hash."""
-    return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
+    return _pwd_context.verify(plain_password, hashed_password)
 
 
 # ---------------------------------------------------------------------------
