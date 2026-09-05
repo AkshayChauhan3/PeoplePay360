@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useAttendance } from '../../context/AttendanceContext';
 import { UserRole } from '../../types/api';
+import { canAccessTab } from '../../utils/rbac';
 import {
   Clock,
   Play,
@@ -26,6 +27,8 @@ export const Header: React.FC<HeaderProps> = ({ currentTab = 'dashboard', onNavi
 
   // Dropdown open states for Excalidraw Odoo top navbar
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
+
+  const role = user?.role;
 
   const formatTime = (secs: number) => {
     const h = Math.floor(secs / 3600);
@@ -63,7 +66,7 @@ export const Header: React.FC<HeaderProps> = ({ currentTab = 'dashboard', onNavi
       {/* Left: Odoo-Style Top Navigation Menus matching Excalidraw */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
         <div
-          onClick={() => handleNav('dashboard')}
+          onClick={() => handleNav(canAccessTab(role, 'dashboard') ? 'dashboard' : 'attendance')}
           style={{
             fontWeight: 800,
             fontSize: '15px',
@@ -80,229 +83,265 @@ export const Header: React.FC<HeaderProps> = ({ currentTab = 'dashboard', onNavi
         </div>
 
         {/* Employees Dropdown */}
-        <div style={{ position: 'relative' }}>
-          <button
-            type="button"
-            className="btn btn-neutral btn-sm"
-            style={{
-              fontWeight: ['employees', 'contracts', 'departments', 'schedules'].includes(currentTab) ? 700 : 500,
-              color: ['employees', 'contracts', 'departments', 'schedules'].includes(currentTab) ? 'var(--primary)' : 'inherit',
-              gap: '4px',
-            }}
-            onClick={() => setOpenDropdown(openDropdown === 'employees' ? null : 'employees')}
-          >
-            <span>Employees</span>
-            <ChevronDown size={13} />
-          </button>
-
-          {openDropdown === 'employees' && (
-            <div
+        {canAccessTab(role, 'employees') && (
+          <div style={{ position: 'relative' }}>
+            <button
+              type="button"
+              className="btn btn-neutral btn-sm"
               style={{
-                position: 'absolute',
-                top: '100%',
-                left: 0,
-                marginTop: '4px',
-                width: '180px',
-                backgroundColor: 'var(--bg-surface)',
-                border: '1px solid var(--border-hairline)',
-                borderRadius: 'var(--radius-control)',
-                boxShadow: 'var(--elevation-tier2)',
-                zIndex: 150,
-                padding: '4px',
+                fontWeight: ['employees', 'contracts', 'departments', 'schedules'].includes(currentTab) ? 700 : 500,
+                color: ['employees', 'contracts', 'departments', 'schedules'].includes(currentTab) ? 'var(--primary)' : 'inherit',
+                gap: '4px',
               }}
+              onClick={() => setOpenDropdown(openDropdown === 'employees' ? null : 'employees')}
             >
+              <span>Employees</span>
+              <ChevronDown size={13} />
+            </button>
+
+            {openDropdown === 'employees' && (
               <div
-                style={{ padding: '8px 12px', fontSize: '13px', cursor: 'pointer', borderRadius: '4px' }}
-                className="dropdown-nav-item"
-                onClick={() => handleNav('employees')}
+                style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: 0,
+                  marginTop: '4px',
+                  width: '180px',
+                  backgroundColor: 'var(--bg-surface)',
+                  border: '1px solid var(--border-hairline)',
+                  borderRadius: 'var(--radius-control)',
+                  boxShadow: 'var(--elevation-tier2)',
+                  zIndex: 150,
+                  padding: '4px',
+                }}
               >
-                Employees
+                {canAccessTab(role, 'employees') && (
+                  <div
+                    style={{ padding: '8px 12px', fontSize: '13px', cursor: 'pointer', borderRadius: '4px' }}
+                    className="dropdown-nav-item"
+                    onClick={() => handleNav('employees')}
+                  >
+                    Employees
+                  </div>
+                )}
+                {canAccessTab(role, 'contracts') && (
+                  <div
+                    style={{ padding: '8px 12px', fontSize: '13px', cursor: 'pointer', borderRadius: '4px' }}
+                    className="dropdown-nav-item"
+                    onClick={() => handleNav('contracts')}
+                  >
+                    Contracts
+                  </div>
+                )}
+                {canAccessTab(role, 'departments') && (
+                  <div
+                    style={{ padding: '8px 12px', fontSize: '13px', cursor: 'pointer', borderRadius: '4px' }}
+                    className="dropdown-nav-item"
+                    onClick={() => handleNav('departments')}
+                  >
+                    Departments
+                  </div>
+                )}
+                {canAccessTab(role, 'schedules') && (
+                  <div
+                    style={{ padding: '8px 12px', fontSize: '13px', cursor: 'pointer', borderRadius: '4px' }}
+                    className="dropdown-nav-item"
+                    onClick={() => handleNav('schedules')}
+                  >
+                    Working Schedule
+                  </div>
+                )}
               </div>
-              <div
-                style={{ padding: '8px 12px', fontSize: '13px', cursor: 'pointer', borderRadius: '4px' }}
-                className="dropdown-nav-item"
-                onClick={() => handleNav('contracts')}
-              >
-                Contracts
-              </div>
-              <div
-                style={{ padding: '8px 12px', fontSize: '13px', cursor: 'pointer', borderRadius: '4px' }}
-                className="dropdown-nav-item"
-                onClick={() => handleNav('departments')}
-              >
-                Departments
-              </div>
-              <div
-                style={{ padding: '8px 12px', fontSize: '13px', cursor: 'pointer', borderRadius: '4px' }}
-                className="dropdown-nav-item"
-                onClick={() => handleNav('schedules')}
-              >
-                Working Schedule
-              </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
 
         {/* Contracts Direct Link */}
-        <button
-          type="button"
-          className="btn btn-neutral btn-sm"
-          style={{
-            fontWeight: currentTab === 'contracts' ? 700 : 500,
-            color: currentTab === 'contracts' ? 'var(--primary)' : 'inherit',
-          }}
-          onClick={() => handleNav('contracts')}
-        >
-          Contracts
-        </button>
+        {canAccessTab(role, 'contracts') && (
+          <button
+            type="button"
+            className="btn btn-neutral btn-sm"
+            style={{
+              fontWeight: currentTab === 'contracts' ? 700 : 500,
+              color: currentTab === 'contracts' ? 'var(--primary)' : 'inherit',
+            }}
+            onClick={() => handleNav('contracts')}
+          >
+            Contracts
+          </button>
+        )}
 
         {/* Attendance Direct Link */}
-        <button
-          type="button"
-          className="btn btn-neutral btn-sm"
-          style={{
-            fontWeight: currentTab === 'attendance' ? 700 : 500,
-            color: currentTab === 'attendance' ? 'var(--primary)' : 'inherit',
-          }}
-          onClick={() => handleNav('attendance')}
-        >
-          Attendance
-        </button>
+        {canAccessTab(role, 'attendance') && (
+          <button
+            type="button"
+            className="btn btn-neutral btn-sm"
+            style={{
+              fontWeight: currentTab === 'attendance' ? 700 : 500,
+              color: currentTab === 'attendance' ? 'var(--primary)' : 'inherit',
+            }}
+            onClick={() => handleNav('attendance')}
+          >
+            Attendance
+          </button>
+        )}
 
         {/* Time Off Dropdown */}
-        <div style={{ position: 'relative' }}>
-          <button
-            type="button"
-            className="btn btn-neutral btn-sm"
-            style={{
-              fontWeight: currentTab.startsWith('timeoff') ? 700 : 500,
-              color: currentTab.startsWith('timeoff') ? 'var(--primary)' : 'inherit',
-              gap: '4px',
-            }}
-            onClick={() => setOpenDropdown(openDropdown === 'timeoff' ? null : 'timeoff')}
-          >
-            <span>Time Off</span>
-            <ChevronDown size={13} />
-          </button>
-
-          {openDropdown === 'timeoff' && (
-            <div
+        {(canAccessTab(role, 'timeoff') || canAccessTab(role, 'timeoff-requests')) && (
+          <div style={{ position: 'relative' }}>
+            <button
+              type="button"
+              className="btn btn-neutral btn-sm"
               style={{
-                position: 'absolute',
-                top: '100%',
-                left: 0,
-                marginTop: '4px',
-                width: '180px',
-                backgroundColor: 'var(--bg-surface)',
-                border: '1px solid var(--border-hairline)',
-                borderRadius: 'var(--radius-control)',
-                boxShadow: 'var(--elevation-tier2)',
-                zIndex: 150,
-                padding: '4px',
+                fontWeight: currentTab.startsWith('timeoff') ? 700 : 500,
+                color: currentTab.startsWith('timeoff') ? 'var(--primary)' : 'inherit',
+                gap: '4px',
               }}
+              onClick={() => setOpenDropdown(openDropdown === 'timeoff' ? null : 'timeoff')}
             >
+              <span>Time Off</span>
+              <ChevronDown size={13} />
+            </button>
+
+            {openDropdown === 'timeoff' && (
               <div
-                style={{ padding: '8px 12px', fontSize: '13px', cursor: 'pointer', borderRadius: '4px' }}
-                className="dropdown-nav-item"
-                onClick={() => handleNav('dashboard')}
+                style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: 0,
+                  marginTop: '4px',
+                  width: '180px',
+                  backgroundColor: 'var(--bg-surface)',
+                  border: '1px solid var(--border-hairline)',
+                  borderRadius: 'var(--radius-control)',
+                  boxShadow: 'var(--elevation-tier2)',
+                  zIndex: 150,
+                  padding: '4px',
+                }}
               >
-                Dashboard
+                {canAccessTab(role, 'dashboard') && (
+                  <div
+                    style={{ padding: '8px 12px', fontSize: '13px', cursor: 'pointer', borderRadius: '4px' }}
+                    className="dropdown-nav-item"
+                    onClick={() => handleNav('dashboard')}
+                  >
+                    Dashboard
+                  </div>
+                )}
+                {canAccessTab(role, 'timeoff-requests') && (
+                  <div
+                    style={{ padding: '8px 12px', fontSize: '13px', cursor: 'pointer', borderRadius: '4px' }}
+                    className="dropdown-nav-item"
+                    onClick={() => handleNav('timeoff-requests')}
+                  >
+                    Time Off Requests
+                  </div>
+                )}
+                {canAccessTab(role, 'timeoff-types') && (
+                  <div
+                    style={{ padding: '8px 12px', fontSize: '13px', cursor: 'pointer', borderRadius: '4px' }}
+                    className="dropdown-nav-item"
+                    onClick={() => handleNav('timeoff-types')}
+                  >
+                    Time Off Types
+                  </div>
+                )}
+                {canAccessTab(role, 'timeoff-allocations') && (
+                  <div
+                    style={{ padding: '8px 12px', fontSize: '13px', cursor: 'pointer', borderRadius: '4px' }}
+                    className="dropdown-nav-item"
+                    onClick={() => handleNav('timeoff-allocations')}
+                  >
+                    Allocations
+                  </div>
+                )}
               </div>
-              <div
-                style={{ padding: '8px 12px', fontSize: '13px', cursor: 'pointer', borderRadius: '4px' }}
-                className="dropdown-nav-item"
-                onClick={() => handleNav('timeoff-requests')}
-              >
-                Time Off Requests
-              </div>
-              <div
-                style={{ padding: '8px 12px', fontSize: '13px', cursor: 'pointer', borderRadius: '4px' }}
-                className="dropdown-nav-item"
-                onClick={() => handleNav('timeoff-types')}
-              >
-                Time Off Types
-              </div>
-              <div
-                style={{ padding: '8px 12px', fontSize: '13px', cursor: 'pointer', borderRadius: '4px' }}
-                className="dropdown-nav-item"
-                onClick={() => handleNav('timeoff-allocations')}
-              >
-                Allocations
-              </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
 
         {/* Payroll Dropdown */}
-        <div style={{ position: 'relative' }}>
-          <button
-            type="button"
-            className="btn btn-neutral btn-sm"
-            style={{
-              fontWeight: ['payroll', 'payslips', 'salary', 'rules'].includes(currentTab) ? 700 : 500,
-              color: ['payroll', 'payslips', 'salary', 'rules'].includes(currentTab) ? 'var(--primary)' : 'inherit',
-              gap: '4px',
-            }}
-            onClick={() => setOpenDropdown(openDropdown === 'payroll' ? null : 'payroll')}
-          >
-            <span>Payroll</span>
-            <ChevronDown size={13} />
-          </button>
-
-          {openDropdown === 'payroll' && (
-            <div
+        {(canAccessTab(role, 'payroll') || canAccessTab(role, 'payslips')) && (
+          <div style={{ position: 'relative' }}>
+            <button
+              type="button"
+              className="btn btn-neutral btn-sm"
               style={{
-                position: 'absolute',
-                top: '100%',
-                left: 0,
-                marginTop: '4px',
-                width: '180px',
-                backgroundColor: 'var(--bg-surface)',
-                border: '1px solid var(--border-hairline)',
-                borderRadius: 'var(--radius-control)',
-                boxShadow: 'var(--elevation-tier2)',
-                zIndex: 150,
-                padding: '4px',
+                fontWeight: ['payroll', 'payslips', 'salary', 'rules'].includes(currentTab) ? 700 : 500,
+                color: ['payroll', 'payslips', 'salary', 'rules'].includes(currentTab) ? 'var(--primary)' : 'inherit',
+                gap: '4px',
               }}
+              onClick={() => setOpenDropdown(openDropdown === 'payroll' ? null : 'payroll')}
             >
+              <span>Payroll</span>
+              <ChevronDown size={13} />
+            </button>
+
+            {openDropdown === 'payroll' && (
               <div
-                style={{ padding: '8px 12px', fontSize: '13px', cursor: 'pointer', borderRadius: '4px' }}
-                className="dropdown-nav-item"
-                onClick={() => handleNav('dashboard')}
+                style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: 0,
+                  marginTop: '4px',
+                  width: '180px',
+                  backgroundColor: 'var(--bg-surface)',
+                  border: '1px solid var(--border-hairline)',
+                  borderRadius: 'var(--radius-control)',
+                  boxShadow: 'var(--elevation-tier2)',
+                  zIndex: 150,
+                  padding: '4px',
+                }}
               >
-                Dashboard
+                {canAccessTab(role, 'dashboard') && (
+                  <div
+                    style={{ padding: '8px 12px', fontSize: '13px', cursor: 'pointer', borderRadius: '4px' }}
+                    className="dropdown-nav-item"
+                    onClick={() => handleNav('dashboard')}
+                  >
+                    Dashboard
+                  </div>
+                )}
+                {canAccessTab(role, 'payroll') && (
+                  <div
+                    style={{ padding: '8px 12px', fontSize: '13px', cursor: 'pointer', borderRadius: '4px' }}
+                    className="dropdown-nav-item"
+                    onClick={() => handleNav('payroll')}
+                  >
+                    Payruns
+                  </div>
+                )}
+                {canAccessTab(role, 'payslips') && (
+                  <div
+                    style={{ padding: '8px 12px', fontSize: '13px', cursor: 'pointer', borderRadius: '4px' }}
+                    className="dropdown-nav-item"
+                    onClick={() => handleNav('payslips')}
+                  >
+                    Payslips
+                  </div>
+                )}
+                {canAccessTab(role, 'salary') && (
+                  <div
+                    style={{ padding: '8px 12px', fontSize: '13px', cursor: 'pointer', borderRadius: '4px' }}
+                    className="dropdown-nav-item"
+                    onClick={() => handleNav('salary')}
+                  >
+                    Structures
+                  </div>
+                )}
+                {canAccessTab(role, 'rules') && (
+                  <div
+                    style={{ padding: '8px 12px', fontSize: '13px', cursor: 'pointer', borderRadius: '4px' }}
+                    className="dropdown-nav-item"
+                    onClick={() => handleNav('rules')}
+                  >
+                    Rules
+                  </div>
+                )}
               </div>
-              <div
-                style={{ padding: '8px 12px', fontSize: '13px', cursor: 'pointer', borderRadius: '4px' }}
-                className="dropdown-nav-item"
-                onClick={() => handleNav('payroll')}
-              >
-                Payruns
-              </div>
-              <div
-                style={{ padding: '8px 12px', fontSize: '13px', cursor: 'pointer', borderRadius: '4px' }}
-                className="dropdown-nav-item"
-                onClick={() => handleNav('payslips')}
-              >
-                Payslips
-              </div>
-              <div
-                style={{ padding: '8px 12px', fontSize: '13px', cursor: 'pointer', borderRadius: '4px' }}
-                className="dropdown-nav-item"
-                onClick={() => handleNav('salary')}
-              >
-                Structures
-              </div>
-              <div
-                style={{ padding: '8px 12px', fontSize: '13px', cursor: 'pointer', borderRadius: '4px' }}
-                className="dropdown-nav-item"
-                onClick={() => handleNav('rules')}
-              >
-                Rules
-              </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Right Controls: Attendance Widget, Mode Pill, Role Switcher */}

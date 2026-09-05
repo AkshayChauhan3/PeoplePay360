@@ -4,6 +4,8 @@ import { AttendanceOut } from '../../types/api';
 import { useAttendance } from '../../context/AttendanceContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { Modal } from '../../components/common/Modal';
+import { useAuth } from '../../context/AuthContext';
+import { ROLE_PERMISSIONS } from '../../utils/rbac';
 import {
   Clock,
   Play,
@@ -18,6 +20,8 @@ export const AttendanceListPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
   const { hasActiveSession, elapsedSeconds, checkIn, checkOut, isPunching } = useAttendance();
+  const { user } = useAuth();
+  const canCorrect = user?.role ? ROLE_PERMISSIONS[user.role]?.canCorrectAttendance : false;
 
   const [viewingRecord, setViewingRecord] = useState<AttendanceOut | null>(null);
 
@@ -89,14 +93,16 @@ export const AttendanceListPage: React.FC = () => {
             Attendance / {viewingRecord.employee_name || 'Aarav Mehta'} / {viewingRecord.date}
           </h2>
           <StatusBadge status={viewingRecord.status} />
-          <button
-            type="button"
-            className="btn btn-primary btn-compact"
-            style={{ marginLeft: 'auto' }}
-            onClick={() => handleOpenCorrection(viewingRecord)}
-          >
-            <Edit3 size={14} /> EDIT
-          </button>
+          {canCorrect && (
+            <button
+              type="button"
+              className="btn btn-primary btn-compact"
+              style={{ marginLeft: 'auto' }}
+              onClick={() => handleOpenCorrection(viewingRecord)}
+            >
+              <Edit3 size={14} /> EDIT
+            </button>
+          )}
         </div>
 
         <div className="card" style={{ padding: '24px', maxWidth: '800px' }}>
@@ -318,18 +324,22 @@ export const AttendanceListPage: React.FC = () => {
                     <StatusBadge status={r.status} isException={r.is_exception} />
                   </td>
                   <td>
-                    <button
-                      type="button"
-                      className="btn btn-neutral btn-sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleOpenCorrection(r);
-                      }}
-                      title="Adjust punch time with audit log"
-                    >
-                      <Edit3 size={13} />
-                      <span>Correct</span>
-                    </button>
+                    {canCorrect ? (
+                      <button
+                        type="button"
+                        className="btn btn-neutral btn-sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenCorrection(r);
+                        }}
+                        title="Adjust punch time with audit log"
+                      >
+                        <Edit3 size={13} />
+                        <span>Correct</span>
+                      </button>
+                    ) : (
+                      <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Read Only</span>
+                    )}
                   </td>
                 </tr>
               ))}

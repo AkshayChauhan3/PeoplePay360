@@ -73,8 +73,18 @@ export const apiService = {
       '/api/v1/auth/login',
       { email, password },
       () => {
-        const found = inMemoryUsers.find((u) => u.email.toLowerCase() === email.toLowerCase());
-        const user = found || inMemoryUsers[0];
+        const emailLower = email.toLowerCase().trim();
+        const found = inMemoryUsers.find(
+          (u) =>
+            u.email.toLowerCase() === emailLower ||
+            (emailLower.includes('admin') && u.role === 'ADMIN') ||
+            (emailLower.includes('maya') && u.role === 'HR_MANAGER') ||
+            (emailLower.includes('priya') && u.role === 'HR_MANAGER') ||
+            (emailLower.includes('rohan') && u.role === 'EMPLOYEE') ||
+            (emailLower.includes('nisha') && u.role === 'HR_PAYROLL_MANAGER') ||
+            (emailLower.includes('aarav') && (u.role === 'HR_PAYROLL_MANAGER' || u.role === 'HR_PAYROLL_USER'))
+        );
+        const user = found || inMemoryUsers.find((u) => u.role === 'ADMIN') || inMemoryUsers[0];
         const token = `mock-token-${user.id}-${user.role}`;
         apiClient.setTokens(token, `mock-refresh-${user.id}`);
         return {
@@ -109,13 +119,12 @@ export const apiService = {
   async getMe(): Promise<UserResponse> {
     return apiClient.get('/api/v1/auth/me', () => {
       const token = apiClient.getAccessToken();
-      if (token && token.includes('mock-token-')) {
-        const parts = token.split('-');
-        const userId = parts[2];
-        const user = inMemoryUsers.find((u) => u.id === userId);
-        if (user) return user;
+      if (token && token.startsWith('mock-token-')) {
+        const rest = token.replace('mock-token-', '');
+        const found = inMemoryUsers.find((u) => rest.startsWith(u.id));
+        if (found) return found;
       }
-      return inMemoryUsers[0];
+      return inMemoryUsers.find((u) => u.role === 'ADMIN') || inMemoryUsers[0];
     });
   },
 

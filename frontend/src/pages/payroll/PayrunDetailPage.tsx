@@ -13,6 +13,8 @@ import {
   Mail,
   AlertTriangle,
 } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import { ROLE_PERMISSIONS } from '../../utils/rbac';
 
 interface PayrunDetailPageProps {
   payrunId: string;
@@ -24,6 +26,8 @@ export const PayrunDetailPage: React.FC<PayrunDetailPageProps> = ({ payrunId, on
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [selectedPayslipId, setSelectedPayslipId] = useState<string | null>(null);
+  const { user } = useAuth();
+  const canValidate = user?.role ? ROLE_PERMISSIONS[user.role]?.canValidatePayrun : false;
 
   // Mark Paid Modal State
   const [isMarkPaidModalOpen, setIsMarkPaidModalOpen] = useState(false);
@@ -142,10 +146,11 @@ export const PayrunDetailPage: React.FC<PayrunDetailPageProps> = ({ payrunId, on
                 type="button"
                 className="btn btn-secondary"
                 onClick={handleValidate}
-                disabled={actionLoading}
+                disabled={actionLoading || !canValidate}
+                title={!canValidate ? 'Requires HR Payroll Manager or Admin role' : undefined}
               >
                 <Lock size={16} />
-                <span>Validate & Lock Batch</span>
+                <span>{canValidate ? 'Validate & Lock Batch' : 'Validate (Payroll Manager Only)'}</span>
               </button>
             )}
 
@@ -154,10 +159,11 @@ export const PayrunDetailPage: React.FC<PayrunDetailPageProps> = ({ payrunId, on
                 type="button"
                 className="btn btn-primary"
                 onClick={() => setIsMarkPaidModalOpen(true)}
-                disabled={actionLoading}
+                disabled={actionLoading || !canValidate}
+                title={!canValidate ? 'Requires HR Payroll Manager or Admin role' : undefined}
               >
                 <CreditCard size={16} />
-                <span>Mark as Paid</span>
+                <span>{canValidate ? 'Mark as Paid' : 'Mark as Paid (Manager Only)'}</span>
               </button>
             )}
 

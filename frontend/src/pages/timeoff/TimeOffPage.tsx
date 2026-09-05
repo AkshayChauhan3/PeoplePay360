@@ -103,6 +103,19 @@ export const TimeOffPage: React.FC<{ initialTab?: 'requests' | 'allocations' | '
     }
   };
 
+  const handleAllocationAction = (allocId: string, action: 'approve' | 'refuse') => {
+    setAllocations((prev) =>
+      prev.map((a) =>
+        a.id === allocId ? { ...a, status: action === 'approve' ? 'APPROVED' : 'REJECTED' } : a
+      )
+    );
+    if (selectedAllocation && selectedAllocation.id === allocId) {
+      setSelectedAllocation((prev) =>
+        prev ? { ...prev, status: action === 'approve' ? 'APPROVED' : 'REJECTED' } : null
+      );
+    }
+  };
+
   // ----------------------------------------------------
   // Form View 1: Time Off Request Form View
   // ----------------------------------------------------
@@ -207,6 +220,25 @@ export const TimeOffPage: React.FC<{ initialTab?: 'requests' | 'allocations' | '
             Allocation / {selectedAllocation.employee_name || 'Aarav Mehta'}
           </h2>
           <StatusBadge status={selectedAllocation.status} />
+
+          {isManager && selectedAllocation.status === 'DRAFT' && (
+            <div style={{ display: 'flex', gap: '8px', marginLeft: 'auto' }}>
+              <button
+                type="button"
+                className="btn btn-primary btn-compact"
+                onClick={() => handleAllocationAction(selectedAllocation.id, 'approve')}
+              >
+                <Check size={14} /> Approve
+              </button>
+              <button
+                type="button"
+                className="btn btn-danger btn-compact"
+                onClick={() => handleAllocationAction(selectedAllocation.id, 'refuse')}
+              >
+                <X size={14} /> Refuse
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="card" style={{ padding: '24px', maxWidth: '800px' }}>
@@ -523,6 +555,7 @@ export const TimeOffPage: React.FC<{ initialTab?: 'requests' | 'allocations' | '
                 <th>Taken</th>
                 <th>Remaining</th>
                 <th>Status</th>
+                {isManager && <th style={{ textAlign: 'center' }}>Actions</th>}
               </tr>
             </thead>
             <tbody>
@@ -543,6 +576,32 @@ export const TimeOffPage: React.FC<{ initialTab?: 'requests' | 'allocations' | '
                       {a.remaining_days} days
                     </td>
                     <td><StatusBadge status={a.status} /></td>
+                    {isManager && (
+                      <td style={{ textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+                        {a.status === 'DRAFT' ? (
+                          <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
+                            <button
+                              type="button"
+                              className="btn btn-primary btn-compact"
+                              style={{ padding: '3px 8px', fontSize: '11px' }}
+                              onClick={() => handleAllocationAction(a.id, 'approve')}
+                            >
+                              Approve
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-danger btn-compact"
+                              style={{ padding: '3px 8px', fontSize: '11px' }}
+                              onClick={() => handleAllocationAction(a.id, 'refuse')}
+                            >
+                              Refuse
+                            </button>
+                          </div>
+                        ) : (
+                          <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Completed</span>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 ))}
             </tbody>

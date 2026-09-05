@@ -4,7 +4,7 @@ import { ArrowRight } from 'lucide-react';
 
 export const LoginPage: React.FC<{ onLoginSuccess: () => void }> = ({ onLoginSuccess }) => {
   const { login } = useAuth();
-  const [email, setEmail] = useState('admin@peoplepay360.com');
+  const [email, setEmail] = useState('admin@company.com');
   const [password, setPassword] = useState('Str0ng!Pass');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -124,36 +124,44 @@ export const LoginPage: React.FC<{ onLoginSuccess: () => void }> = ({ onLoginSuc
 
         <div style={{ marginTop: '1.75rem', paddingTop: '1.25rem', borderTop: '1px solid var(--border-hairline)' }}>
           <div style={{ fontSize: '11px', textTransform: 'uppercase', color: 'var(--text-secondary)', fontWeight: 600, marginBottom: '8px', textAlign: 'center' }}>
-            Hackathon Fast Sign-In
+            Fast Sign-In by Role Persona
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
             <button
               type="button"
               className="btn btn-neutral btn-sm"
-              onClick={() => setDemoUser('admin@peoplepay360.com')}
+              onClick={() => setDemoUser('admin@company.com')}
             >
-              Admin Demo
+              Admin (All Access)
             </button>
             <button
               type="button"
               className="btn btn-neutral btn-sm"
-              onClick={() => setDemoUser('aarav.mehta@peoplepay360.com')}
-            >
-              Payroll Manager
-            </button>
-            <button
-              type="button"
-              className="btn btn-neutral btn-sm"
-              onClick={() => setDemoUser('priya.sharma@peoplepay360.com')}
+              onClick={() => setDemoUser('maya@company.com')}
             >
               HR Manager
             </button>
             <button
               type="button"
               className="btn btn-neutral btn-sm"
-              onClick={() => setDemoUser('rohan.verma@peoplepay360.com')}
+              onClick={() => setDemoUser('nisha@company.com')}
             >
-              Employee Self
+              Payroll Manager
+            </button>
+            <button
+              type="button"
+              className="btn btn-neutral btn-sm"
+              onClick={() => setDemoUser('aarav@company.com')}
+            >
+              Payroll Specialist
+            </button>
+            <button
+              type="button"
+              className="btn btn-neutral btn-sm"
+              style={{ gridColumn: 'span 2' }}
+              onClick={() => setDemoUser('rohan@company.com')}
+            >
+              Employee Self-Service (Rohan)
             </button>
           </div>
         </div>

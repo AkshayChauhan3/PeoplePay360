@@ -26,9 +26,9 @@ import {
 export const mockUsers: UserResponse[] = [
   {
     id: 'u-1',
-    emp_id: 'emp-1',
-    email: 'aarav@company.com',
-    role: 'HR_PAYROLL_USER',
+    emp_id: null,
+    email: 'admin@company.com',
+    role: 'ADMIN',
     is_active: true,
     created_at: '2026-01-01T00:00:00Z',
     updated_at: '2026-01-01T00:00:00Z',
@@ -62,9 +62,9 @@ export const mockUsers: UserResponse[] = [
   },
   {
     id: 'u-5',
-    emp_id: null,
-    email: 'admin@company.com',
-    role: 'ADMIN',
+    emp_id: 'emp-1',
+    email: 'aarav@company.com',
+    role: 'HR_PAYROLL_USER',
     is_active: true,
     created_at: '2026-01-01T00:00:00Z',
     updated_at: '2026-01-01T00:00:00Z',
