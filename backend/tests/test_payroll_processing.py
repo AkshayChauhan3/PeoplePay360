@@ -1075,3 +1075,132 @@ async def test_rbac_payruns_and_payslips_matrix(
         headers=hr_payroll_manager_auth_headers,
     )
     assert val.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# 11. PDF Payslip Generation & Access Control
+# ---------------------------------------------------------------------------
+async def test_download_payslip_pdf_and_authorization(
+    async_client: AsyncClient,
+    admin_auth_headers: dict[str, str],
+    hr_payroll_manager_auth_headers: dict[str, str],
+    sample_employee: dict,
+):
+    """
+    Test GET /api/v1/payslips/{id}/pdf:
+    - Generates valid binary PDF (%PDF header, application/pdf content-type).
+    - Permitted for HR_PAYROLL_MANAGER and the owner employee.
+    - Forbidden (403) for other employees.
+    - Not found (404) for non-existent payslip.
+    """
+    struct_id = await _setup_standard_structure_and_rules(
+        async_client, hr_payroll_manager_auth_headers, name="PDF Struct", code="PDF_STD"
+    )
+    await _create_contract_and_activate(
+        async_client, admin_auth_headers, sample_employee["id"], struct_id, contract_number="CNT-PDF-1"
+    )
+
+    # 1. Create and compute payrun
+    pr_res = await async_client.post(
+        "/api/v1/payruns",
+        headers=hr_payroll_manager_auth_headers,
+        json={
+            "name": "PDF Run",
+            "salary_structure_id": struct_id,
+            "period_start": "2027-06-01",
+            "period_end": "2027-06-30",
+        },
+    )
+    assert pr_res.status_code == 201
+    payrun_id = pr_res.json()["id"]
+
+    comp_res = await async_client.post(
+        f"/api/v1/payruns/{payrun_id}/compute",
+        headers=hr_payroll_manager_auth_headers,
+    )
+    assert comp_res.status_code == 200
+    payslip_id = comp_res.json()["payslips"][0]["id"]
+
+    # 2. HR Payroll Manager downloads PDF
+    pdf_res = await async_client.get(
+        f"/api/v1/payslips/{payslip_id}/pdf",
+        headers=hr_payroll_manager_auth_headers,
+    )
+    assert pdf_res.status_code == 200
+    assert pdf_res.headers["content-type"] == "application/pdf"
+    assert pdf_res.content.startswith(b"%PDF")
+    assert len(pdf_res.content) > 1000
+
+    # 3. Create two distinct user accounts for owner and stranger employees
+    reg_owner = await async_client.post(
+        "/api/v1/auth/register",
+        json={"email": "pdf_owner@example.com", "password": "Password123"},
+    )
+    user_owner_id = reg_owner.json()["id"]
+    await async_client.post(
+        f"/api/v1/employees/{sample_employee['id']}/user",
+        headers=admin_auth_headers,
+        json={"user_id": user_owner_id},
+    )
+    login_owner = await async_client.post(
+        "/api/v1/auth/login",
+        json={"email": "pdf_owner@example.com", "password": "Password123"},
+    )
+    emp_token = login_owner.json()["access_token"]
+
+    other_emp = (
+        await async_client.post(
+            "/api/v1/employees",
+            headers=admin_auth_headers,
+            json={
+                "employee_code": "E-STRANGER-PDF",
+                "first_name": "Stranger",
+                "last_name": "Employee",
+                "email": "stranger.pdf@example.com",
+                "joining_date": "2026-01-01",
+                "department_id": sample_employee["department_id"],
+                "job_position_id": sample_employee["job_position_id"],
+                "status": "ACTIVE",
+            },
+        )
+    ).json()
+
+    reg_stranger = await async_client.post(
+        "/api/v1/auth/register",
+        json={"email": "stranger_pdf@example.com", "password": "Password123"},
+    )
+    user_stranger_id = reg_stranger.json()["id"]
+    await async_client.post(
+        f"/api/v1/employees/{other_emp['id']}/user",
+        headers=admin_auth_headers,
+        json={"user_id": user_stranger_id},
+    )
+    login_stranger = await async_client.post(
+        "/api/v1/auth/login",
+        json={"email": "stranger_pdf@example.com", "password": "Password123"},
+    )
+    stranger_token = login_stranger.json()["access_token"]
+
+    # 4. Owner employee downloads own PDF payslip
+    owner_res = await async_client.get(
+        f"/api/v1/payslips/{payslip_id}/pdf",
+        headers={"Authorization": f"Bearer {emp_token}"},
+    )
+    assert owner_res.status_code == 200
+    assert owner_res.headers["content-type"] == "application/pdf"
+    assert owner_res.content.startswith(b"%PDF")
+
+    # 5. Stranger employee blocked with 403
+    stranger_res = await async_client.get(
+        f"/api/v1/payslips/{payslip_id}/pdf",
+        headers={"Authorization": f"Bearer {stranger_token}"},
+    )
+    assert stranger_res.status_code == 403
+
+    # 6. Non-existent payslip returns 404
+    nf_res = await async_client.get(
+        "/api/v1/payslips/999999/pdf",
+        headers=hr_payroll_manager_auth_headers,
+    )
+    assert nf_res.status_code == 404
+

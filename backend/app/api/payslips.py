@@ -6,7 +6,7 @@ Endpoints for querying employee payslips and itemized salary rule lines:
 - GET /api/v1/payslips/{id}  (Payroll User/Manager/Admin, or the owner Employee)
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
@@ -14,7 +14,7 @@ from app.dependencies.auth import get_current_user, require_payroll_read
 from app.models.payslip import PayslipStatus
 from app.models.user import User, UserRole
 from app.schemas.payslip import PayslipListResponse, PayslipResponse
-from app.services import payslip_service
+from app.services import payslip_service, pdf_service
 
 router = APIRouter(prefix="/payslips", tags=["Payslips"])
 
@@ -94,4 +94,49 @@ async def get_payslip(
         )
 
     return payslip_service.serialize_payslip_response(payslip)
+
+
+@router.get(
+    "/{payslip_id}/pdf",
+    summary="Download payslip as PDF",
+)
+async def download_payslip_pdf(
+    payslip_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Generates and streams a professional ReportLab PDF salary statement.
+    Authorized for Payroll staff/Admin, or the owner employee.
+    """
+    payslip = await payslip_service.get_payslip_by_id(db, payslip_id)
+    if not payslip:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Payslip with ID {payslip_id} not found.",
+        )
+
+    # Authorization logic
+    is_payroll_staff = current_user.role_name in _PAYROLL_ROLES
+    is_owner_employee = (
+        current_user.employee_id is not None
+        and current_user.employee_id == payslip.employee_id
+    )
+
+    if not is_payroll_staff and not is_owner_employee:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to access this payslip.",
+        )
+
+    pdf_bytes = pdf_service.generate_payslip_pdf(payslip)
+    filename = f"payslip_{payslip.employee_id}_{payslip.period_start}_{payslip.period_end}.pdf"
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="{filename}"',
+        },
+    )
 

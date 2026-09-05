@@ -25,6 +25,7 @@ dependencies = [
 
     # Utilities
     "python-multipart>=0.0.12",
+    "reportlab>=4.2.0",
 ]
 
 [project.optional-dependencies]

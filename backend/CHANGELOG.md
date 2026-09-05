@@ -49,6 +49,8 @@ Introduces end-to-end payroll lifecycle processing: Payrun batches (`Payrun`), E
 - `payslip_service.py`:
   - `get_payslip_by_id()` & `list_payslips()` — Filtered queries by employee, payrun, and status.
   - `get_employee_payslips()` — Employee-specific payslip history retrieval.
+- `pdf_service.py`:
+  - `generate_payslip_pdf()` — ReportLab PDF generator rendering professional payslip statements with company header, employee details, earnings vs deductions table, net pay highlight, and INR currency formatting.
 
 #### API Routers (`app/api/`)
 - `payruns.py` — Mounted at `/api/v1/payruns`:
@@ -65,9 +67,13 @@ Introduces end-to-end payroll lifecycle processing: Payrun batches (`Payrun`), E
 - `payslips.py` — Mounted at `/api/v1/payslips`:
   - `GET /api/v1/payslips` — List all payslips across payruns (`HR_PAYROLL_USER`, `HR_PAYROLL_MANAGER`, `ADMIN`).
   - `GET /api/v1/payslips/{id}` — Get payslip details & line item snapshots (`HR_PAYROLL_USER`, `HR_PAYROLL_MANAGER`, `ADMIN`, or owner `EMPLOYEE`).
+  - `GET /api/v1/payslips/{id}/pdf` — Stream/download ReportLab PDF salary statement (`HR_PAYROLL_USER`, `HR_PAYROLL_MANAGER`, `ADMIN`, or owner `EMPLOYEE`).
 - `employees.py`:
   - `GET /api/v1/employees/me/payslips` — Employee self-service payslip history (authenticated linked user).
   - `GET /api/v1/employees/{employee_id}/payslips` — Employee payslips (payroll staff or owner employee).
+
+#### Root Utilities
+- `run.py` — Convenience application launcher to start the uvicorn development server from the repository root (`python run.py`).
 
 #### Automated Tests (`tests/test_payroll_processing.py`)
 - Comprehensive test suite covering:

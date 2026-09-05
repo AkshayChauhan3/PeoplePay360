@@ -760,6 +760,7 @@ Access control is enforced at the route level using FastAPI dependency injection
 | **Payslips** | | | | | | | |
 | `/api/v1/payslips` | `GET` | List all payslips (filtered/paginated) | ❌ `403` | ✅ | ✅ | ❌ `403` | ✅ |
 | `/api/v1/payslips/{id}` | `GET` | Get payslip details & line snapshots | ✅ *(own only)* | ✅ | ✅ | ❌ `403` | ✅ |
+| `/api/v1/payslips/{id}/pdf` | `GET` | Stream/download ReportLab PDF salary slip | ✅ *(own only)* | ✅ | ✅ | ❌ `403` | ✅ |
 | `/api/v1/employees/me/payslips` | `GET` | View own payslip history | ✅ *(if linked)* | ✅ | ✅ | ✅ | ✅ |
 | `/api/v1/employees/{id}/payslips` | `GET` | View employee payslips | ✅ *(own only)* | ✅ | ✅ | ❌ `403` | ✅ |
 
