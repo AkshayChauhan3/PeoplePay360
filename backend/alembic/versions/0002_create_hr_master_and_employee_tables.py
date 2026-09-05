@@ -160,7 +160,7 @@ def upgrade() -> None:
     # ------------------------------------------------------------------
     op.create_table(
         "employees",
-        sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column("id", postgresql.UUID(as_uuid=True), server_default=sa.text("gen_random_uuid()"), nullable=False),
         sa.Column("employee_code", sa.String(50), nullable=False),
         sa.Column("first_name", sa.String(100), nullable=False),
         sa.Column("last_name", sa.String(100), nullable=False),
@@ -170,7 +170,7 @@ def upgrade() -> None:
         sa.Column("joining_date", sa.Date(), nullable=False),
         sa.Column("department_id", sa.Integer(), nullable=False),
         sa.Column("job_position_id", sa.Integer(), nullable=False),
-        sa.Column("manager_id", sa.Integer(), nullable=True),
+        sa.Column("manager_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column(
             "status",
             employeestatus_enum,
@@ -234,7 +234,7 @@ def upgrade() -> None:
     op.drop_index("ix_users_emp_id", table_name="users")
     op.drop_column("users", "emp_id")
 
-    op.add_column("users", sa.Column("employee_id", sa.Integer(), nullable=True))
+    op.add_column("users", sa.Column("employee_id", postgresql.UUID(as_uuid=True), nullable=True))
     op.create_foreign_key("fk_users_employee_id_employees", "users", "employees", ["employee_id"], ["id"])
     op.create_index("ix_users_employee_id", "users", ["employee_id"], unique=True)
 

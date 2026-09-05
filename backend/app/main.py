@@ -8,6 +8,7 @@ from app.api import (
     attendance,
     auth,
     contracts,
+    dashboard,
     departments,
     employees,
     health,
@@ -22,7 +23,7 @@ from app.api import (
 )
 from app.core.config import settings
 from app.db.database import AsyncSessionLocal
-from app.services import role_service, schedule_service
+from app.services import role_service, schedule_service, user_service
 
 # ---------------------------------------------------------------------------
 # Application lifespan (startup / shutdown)
@@ -31,10 +32,11 @@ from app.services import role_service, schedule_service
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Lifecycle manager: seed initial system roles & default working schedule on startup."""
+    """Lifecycle manager: seed initial system roles, default working schedule & admin user on startup."""
     async with AsyncSessionLocal() as session:
         await role_service.seed_default_roles(session)
         await schedule_service.seed_default_schedule(session)
+        await user_service.seed_default_admin(session)
         await session.commit()
     yield
 
@@ -73,6 +75,7 @@ API_PREFIX = "/api/v1"
 
 app.include_router(health.router, prefix=API_PREFIX)
 app.include_router(auth.router, prefix=API_PREFIX)
+app.include_router(dashboard.router, prefix=API_PREFIX)
 app.include_router(roles.router, prefix=API_PREFIX)
 app.include_router(departments.router, prefix=API_PREFIX)
 app.include_router(job_positions.router, prefix=API_PREFIX)
@@ -86,9 +89,26 @@ app.include_router(time_off.router, prefix=f"{API_PREFIX}/timeoff")
 # Phase 6: Salary Structures & Rules
 app.include_router(salary_structures.router, prefix=API_PREFIX)
 app.include_router(salary_rules.router, prefix=API_PREFIX)
+app.include_router(salary_structures.router, prefix=f"{API_PREFIX}/salary")
+app.include_router(salary_rules.router, prefix=f"{API_PREFIX}/salary")
 # Phase 7: Payruns & Payslips
 app.include_router(payruns.router, prefix=API_PREFIX)
 app.include_router(payslips.router, prefix=API_PREFIX)
+app.include_router(payruns.router, prefix=f"{API_PREFIX}/payroll")
+app.include_router(payslips.router, prefix=f"{API_PREFIX}/payroll")
+
+
+@app.get("/", tags=["Root"])
+async def root():
+    """Root landing endpoint providing API info and documentation links."""
+    return {
+        "name": "PeoplePay360 HRMS & Payroll API",
+        "status": "online",
+        "version": settings.app_version,
+        "docs": "/docs",
+        "health": f"{API_PREFIX}/health",
+        "frontend_app": "http://localhost:5173",
+    }
 
 
 # ---------------------------------------------------------------------------

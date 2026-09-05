@@ -1,64 +1,87 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { apiService } from '../services/apiService';
 
-const types = [
-  { id: 'LT-001', name: 'Annual Leave', days: 24, accrual: 'Monthly', carryover: '10 days', applicable: 'All Employees', paid: true },
-  { id: 'LT-002', name: 'Sick Leave', days: 12, accrual: 'Annually', carryover: 'None', applicable: 'All Employees', paid: true },
-  { id: 'LT-003', name: 'Maternity Leave', days: 90, accrual: 'One-time', carryover: 'N/A', applicable: 'Female Employees', paid: true },
-  { id: 'LT-004', name: 'Paternity Leave', days: 15, accrual: 'One-time', carryover: 'N/A', applicable: 'Male Employees', paid: true },
-  { id: 'LT-005', name: 'Comp Off', days: 'As earned', accrual: 'Per overtime day', carryover: '60 days', applicable: 'All Employees', paid: true },
-  { id: 'LT-006', name: 'Bereavement Leave', days: 5, accrual: 'Per event', carryover: 'None', applicable: 'All Employees', paid: true },
-  { id: 'LT-007', name: 'Unpaid Leave', days: 'Unlimited', accrual: 'On request', carryover: 'N/A', applicable: 'All Employees', paid: false },
-];
+const TimeOffTypesView = () => {
+  const [types, setTypes] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-const TimeOffTypesView = () => (
-  <>
-    <div className="dashboard-header-strip">
-      <div className="dashboard-title">
-        <div className="text-xs font-semibold mb-1" style={{ color: 'var(--secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>TIME OFF</div>
-        <h2 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--primary)', margin: 0 }}>Time Off Types</h2>
-        <p className="mt-1 text-sm" style={{ color: 'var(--text-secondary)' }}>Configure leave policies and entitlement rules.</p>
+  useEffect(() => {
+    const fetchTypes = async () => {
+      setLoading(true);
+      try {
+        const data = await apiService.getTimeOffTypes();
+        setTypes(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.warn('Error loading time off types:', err);
+        setTypes([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchTypes();
+  }, []);
+
+  return (
+    <>
+      <div className="dashboard-header-strip">
+        <div className="dashboard-title">
+          <div className="text-xs font-semibold mb-1" style={{ color: 'var(--secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>TIME OFF</div>
+          <h2 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--primary)', margin: 0 }}>Time Off Types</h2>
+          <p className="mt-1 text-sm" style={{ color: 'var(--text-secondary)' }}>Configured leave policies and entitlement rules loaded from database.</p>
+        </div>
       </div>
-      <button className="btn-primary">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        Add Leave Type
-      </button>
-    </div>
 
-    <div className="card-panel" style={{ padding: 0, overflow: 'hidden' }}>
-      <table className="data-table">
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Leave Type</th>
-            <th>Days Allowed</th>
-            <th>Accrual</th>
-            <th>Carry Over</th>
-            <th>Applicable To</th>
-            <th>Paid</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {types.map(t => (
-            <tr key={t.id} onMouseEnter={e => e.currentTarget.style.background = '#f7fafa'} onMouseLeave={e => e.currentTarget.style.background = 'white'}>
-              <td><span style={{ fontFamily: 'monospace', fontSize: '0.7rem', background: '#f7fafa', padding: '0.2rem 0.4rem', borderRadius: '4px' }}>{t.id}</span></td>
-              <td className="font-bold text-[13px]" style={{ color: 'var(--text-primary)' }}>{t.name}</td>
-              <td className="text-xs font-semibold" style={{ color: 'var(--secondary)' }}>{typeof t.days === 'number' ? `${t.days}d` : t.days}</td>
-              <td className="text-xs" style={{ color: 'var(--text-secondary)' }}>{t.accrual}</td>
-              <td className="text-xs" style={{ color: 'var(--text-secondary)' }}>{t.carryover}</td>
-              <td className="text-xs" style={{ color: 'var(--text-secondary)' }}>{t.applicable}</td>
-              <td><span style={{ background: t.paid ? '#eaf5ef' : '#fff2f2', color: t.paid ? 'var(--success)' : 'var(--critical)', fontSize: '0.7rem', fontWeight: 700, padding: '0.2rem 0.5rem', borderRadius: '4px' }}>{t.paid ? 'Paid' : 'Unpaid'}</span></td>
-              <td>
-                <div className="flex gap-2">
-                  <button style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--secondary)', background: 'none', border: '1px solid var(--border-structural)', borderRadius: '4px', padding: '0.2rem 0.5rem', cursor: 'pointer' }}>Edit</button>
-                </div>
-              </td>
+      <div className="card-panel" style={{ padding: 0, overflow: 'hidden' }}>
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Leave Type</th>
+              <th>Code</th>
+              <th>Unit</th>
+              <th>Allocation Mode</th>
+              <th>Status</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  </>
-);
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr>
+                <td colSpan="6" style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-secondary)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                    <div style={{ width: '18px', height: '18px', border: '2px solid var(--border-structural)', borderTopColor: 'var(--color-primary)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                    <span>Loading time off types from database...</span>
+                  </div>
+                </td>
+              </tr>
+            ) : types.length === 0 ? (
+              <tr>
+                <td colSpan="6" style={{ textAlign: 'center', padding: '4rem 2rem', color: 'var(--text-secondary)' }}>
+                  <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>🏖️</div>
+                  <div style={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--primary)', marginBottom: '0.25rem' }}>No Time Off Types Found</div>
+                  <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>No leave types have been configured in the database yet.</div>
+                </td>
+              </tr>
+            ) : (
+              types.map(t => (
+                <tr key={t.id} onMouseEnter={e => e.currentTarget.style.background = '#f7fafa'} onMouseLeave={e => e.currentTarget.style.background = 'white'}>
+                  <td><span style={{ fontFamily: 'monospace', fontSize: '0.7rem', background: '#f7fafa', padding: '0.2rem 0.4rem', borderRadius: '4px' }}>#{t.id}</span></td>
+                  <td className="font-bold text-[13px]" style={{ color: 'var(--text-primary)' }}>{t.name}</td>
+                  <td className="text-xs font-semibold" style={{ color: 'var(--secondary)' }}>{t.code}</td>
+                  <td className="text-xs" style={{ color: 'var(--text-secondary)' }}>{t.unit || 'DAYS'}</td>
+                  <td className="text-xs" style={{ color: 'var(--text-secondary)' }}>{t.allocation_mode || 'STANDARD'}</td>
+                  <td>
+                    <span style={{ background: t.is_active !== false ? '#eaf5ef' : '#fff2f2', color: t.is_active !== false ? 'var(--success)' : 'var(--critical)', fontSize: '0.7rem', fontWeight: 700, padding: '0.2rem 0.5rem', borderRadius: '4px' }}>
+                      {t.is_active !== false ? 'Active' : 'Inactive'}
+                    </span>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+};
 
 export default TimeOffTypesView;

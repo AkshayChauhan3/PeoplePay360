@@ -1,11 +1,13 @@
-import uuid
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, text
-from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import Boolean, DateTime, Integer, String, text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+
+if TYPE_CHECKING:
+    from app.models.employee import Employee
 
 
 def _utcnow() -> datetime:
@@ -21,39 +23,37 @@ class Department(Base):
     """
 
     __tablename__ = "departments"
-    __table_args__ = (
-        UniqueConstraint("company_id", "code", name="uq_departments_company_code"),
-    )
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+    id: Mapped[int] = mapped_column(
+        Integer,
         primary_key=True,
-        server_default=text("gen_random_uuid()"),
-        default=uuid.uuid4,
-    )
-
-    company_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("companies.id", ondelete="RESTRICT"),
-        nullable=False,
-        index=True,
+        autoincrement=True,
     )
 
     name: Mapped[str] = mapped_column(
-        String(100),
+        String(150),
+        unique=True,
+        index=True,
         nullable=False,
     )
 
     code: Mapped[str] = mapped_column(
-        String(20),
+        String(50),
+        unique=True,
+        index=True,
         nullable=False,
     )
 
-    manager_employee_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
+    description: Mapped[str | None] = mapped_column(
+        String(255),
         nullable=True,
-        index=True,
-        comment="Foreign-key-ready reference to employees.id for department manager",
+    )
+
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+        server_default=text("true"),
+        nullable=False,
     )
 
     created_at: Mapped[datetime] = mapped_column(
@@ -69,6 +69,11 @@ class Department(Base):
         default=_utcnow,
         onupdate=_utcnow,
         server_default=text("now()"),
+    )
+
+    employees: Mapped[list["Employee"]] = relationship(
+        "Employee",
+        back_populates="department",
     )
 
     def __repr__(self) -> str:

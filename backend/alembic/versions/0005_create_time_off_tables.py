@@ -102,7 +102,7 @@ def upgrade() -> None:
     op.create_table(
         "time_off_allocations",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
-        sa.Column("employee_id", sa.Integer(), nullable=False),
+        sa.Column("employee_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("time_off_type_id", sa.Integer(), nullable=False),
         sa.Column("allocation_quantity", sa.Numeric(precision=6, scale=2), nullable=False),
         sa.Column("consumed_quantity", sa.Numeric(precision=6, scale=2), server_default="0.00", nullable=False),
@@ -136,7 +136,7 @@ def upgrade() -> None:
     op.create_table(
         "time_off_requests",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
-        sa.Column("employee_id", sa.Integer(), nullable=False),
+        sa.Column("employee_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("time_off_type_id", sa.Integer(), nullable=False),
         sa.Column("allocation_id", sa.Integer(), nullable=True),
         sa.Column("start_date", sa.Date(), nullable=False),

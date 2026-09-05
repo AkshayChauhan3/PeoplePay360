@@ -4,7 +4,7 @@ import { apiService } from '../services/apiService';
 
 const LoginPortal = ({ onSignIn }) => {
   const [email, setEmail] = useState('admin@peoplepay360.com');
-  const [password, setPassword] = useState('admin123');
+  const [password, setPassword] = useState('Admin@123');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -24,7 +24,7 @@ const LoginPortal = ({ onSignIn }) => {
 
   const setDemo = (demoEmail, demoRole) => {
     setEmail(demoEmail);
-    setPassword('admin123');
+    setPassword('Admin@123');
   };
 
   return (

@@ -9,6 +9,7 @@ pydantic-settings>=2.6.0
 passlib[bcrypt]>=1.7.4
 python-jose[cryptography]>=3.3.0
 python-multipart>=0.0.12
+reportlab>=4.0.0
 
 # Dev / test dependencies
 pytest>=8.3.0

@@ -29,8 +29,8 @@ from app.db.base import Base  # noqa: F401 — triggers all model imports for me
 config = context.config
 
 # Dynamically override the database URL from Pydantic settings.
-# This ensures a single source of truth for the database connection string.
-config.set_main_option("sqlalchemy.url", settings.database_url)
+# Escape '%' to '%%' for ConfigParser compatibility (e.g. url-encoded passwords like %40).
+config.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"))
 
 # Set up Python logging if alembic.ini specifies a logging config file
 if config.config_file_name is not None:

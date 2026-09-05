@@ -46,7 +46,7 @@ class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     id: int
-    employee_id: int | None = None
+    employee_id: Any | None = None
     email: EmailStr
     role_id: int
     role: str

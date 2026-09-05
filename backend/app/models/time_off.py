@@ -8,6 +8,7 @@ Defines ORM entities for:
 """
 
 import enum
+import uuid
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import TYPE_CHECKING
@@ -23,6 +24,7 @@ from sqlalchemy import (
     String,
     text,
 )
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -193,8 +195,8 @@ class TimeOffAllocation(Base):
         autoincrement=True,
     )
 
-    employee_id: Mapped[int] = mapped_column(
-        Integer,
+    employee_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
         ForeignKey("employees.id", ondelete="RESTRICT"),
         index=True,
         nullable=False,
@@ -304,8 +306,8 @@ class TimeOffRequest(Base):
         autoincrement=True,
     )
 
-    employee_id: Mapped[int] = mapped_column(
-        Integer,
+    employee_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
         ForeignKey("employees.id", ondelete="RESTRICT"),
         index=True,
         nullable=False,

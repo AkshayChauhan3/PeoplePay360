@@ -18,8 +18,6 @@ down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
-# PostgreSQL ENUM definition — create_type=False because we manage
-# creation explicitly in upgrade() using a safe DO block.
 userrole_enum = postgresql.ENUM(
     "EMPLOYEE",
     "HR_MANAGER",
@@ -32,10 +30,9 @@ userrole_enum = postgresql.ENUM(
 
 
 def upgrade() -> None:
-    # Enable pgcrypto for gen_random_uuid() (built-in since PG 13).
+    # Enable pgcrypto for gen_random_uuid()
     op.execute("CREATE EXTENSION IF NOT EXISTS pgcrypto")
 
-    # Create the ENUM type — safe to re-run, silently skips if it exists.
     op.execute("""
         DO $$ BEGIN
             CREATE TYPE userrole AS ENUM (
@@ -86,10 +83,7 @@ def upgrade() -> None:
         sa.UniqueConstraint("email", name="uq_users_email"),
     )
 
-    # Index on email for fast login lookups
     op.create_index("ix_users_email", "users", ["email"], unique=True)
-
-    # Index on emp_id for future FK join performance
     op.create_index("ix_users_emp_id", "users", ["emp_id"])
 
 
@@ -98,4 +92,3 @@ def downgrade() -> None:
     op.drop_index("ix_users_email", table_name="users")
     op.drop_table("users")
     userrole_enum.drop(op.get_bind(), checkfirst=True)
-

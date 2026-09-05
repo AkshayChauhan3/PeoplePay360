@@ -1,15 +1,5 @@
-import React, { useState } from 'react';
-
-const positions = [
-  { id: 'JP-001', title: 'Lead Staff Architect', dept: 'Engineering', level: 'L7', type: 'Full-time', openings: 1, filled: 5, location: 'Bengaluru Hub', salary: '₹28–38 LPA' },
-  { id: 'JP-002', title: 'Senior UX Designer', dept: 'Product & UX', level: 'L5', type: 'Full-time', openings: 1, filled: 4, location: 'London Office', salary: '₹20–28 LPA' },
-  { id: 'JP-003', title: 'Chief People Officer', dept: 'People Ops', level: 'C-Suite', type: 'Full-time', openings: 0, filled: 1, location: 'Mumbai HQ', salary: '₹50–70 LPA' },
-  { id: 'JP-004', title: 'VP Global Enterprise', dept: 'Sales & Growth', level: 'VP', type: 'Full-time', openings: 2, filled: 3, location: 'Singapore', salary: '₹40–55 LPA' },
-  { id: 'JP-005', title: 'Senior DevOps Engineer', dept: 'Engineering', level: 'L6', type: 'Full-time', openings: 2, filled: 6, location: 'Bengaluru Hub', salary: '₹22–32 LPA' },
-  { id: 'JP-006', title: 'Head of Infrastructure', dept: 'Operations', level: 'L6', type: 'Full-time', openings: 1, filled: 2, location: 'Mumbai HQ', salary: '₹25–35 LPA' },
-  { id: 'JP-007', title: 'Payroll Specialist', dept: 'Finance', level: 'L4', type: 'Full-time', openings: 0, filled: 3, location: 'Dubai Hub', salary: '₹10–15 LPA' },
-  { id: 'JP-008', title: 'Frontend Engineer', dept: 'Engineering', level: 'L4', type: 'Full-time', openings: 3, filled: 8, location: 'Remote', salary: '₹15–22 LPA' },
-];
+import React, { useState, useEffect } from 'react';
+import { apiService } from '../services/apiService';
 
 const levelColors = {
   'C-Suite': { bg: '#f6f0f7', text: '#3b123f' },
@@ -20,13 +10,77 @@ const levelColors = {
   'L4': { bg: '#f7fafa', text: '#49636a' },
 };
 
+const normalizePosition = (p, idx) => ({
+  id: p.code || p.id || `JP-00${idx + 1}`,
+  title: p.name || p.title || 'Job Position',
+  dept: p.department?.name || p.department_name || p.dept || 'General',
+  level: p.level || 'L4',
+  type: p.employment_type || p.type || 'Full-time',
+  openings: p.expected_employees !== undefined ? p.expected_employees : (p.openings || 0),
+  filled: p.current_employees !== undefined ? p.current_employees : (p.filled || 0),
+  location: p.location || 'Corporate HQ',
+  salary: p.salary || 'Standard Band',
+});
+
 const JobPositionsView = () => {
+  const [positions, setPositions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
+
+  useEffect(() => {
+    const fetchPositions = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const [posRes, empRes] = await Promise.allSettled([
+          apiService.getJobPositions(),
+          apiService.getEmployees(),
+        ]);
+        const rawPos = posRes.status === 'fulfilled' && Array.isArray(posRes.value) ? posRes.value : [];
+        const rawEmps = empRes.status === 'fulfilled' 
+          ? (empRes.value?.items || (Array.isArray(empRes.value) ? empRes.value : []))
+          : [];
+
+        const normalized = rawPos.map((p, idx) => {
+          const filledEmps = rawEmps.filter(e => e.job_position_id === p.id);
+          const sampleEmp = filledEmps[0];
+          const deptName = sampleEmp?.department?.name || 'General Operations';
+
+          return {
+            id: p.code || `JP-00${idx + 1}`,
+            rawId: p.id,
+            title: p.name || 'Job Position',
+            dept: deptName,
+            level: (p.name || '').includes('VP') || (p.name || '').includes('Head') ? 'L7' : ((p.name || '').includes('Senior') || (p.name || '').includes('Manager') ? 'L6' : 'L4'),
+            type: 'Full-time',
+            openings: Math.max(0, 2 - filledEmps.length),
+            filled: filledEmps.length,
+            location: 'Corporate HQ',
+            salary: '₹12–24 LPA',
+          };
+        });
+
+        setPositions(normalized);
+      } catch (err) {
+        console.error('Failed to fetch job positions:', err);
+        setError(err.message || 'Unable to load job positions.');
+        setPositions([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchPositions();
+  }, []);
 
   const filtered = positions.filter(p =>
     p.title.toLowerCase().includes(search.toLowerCase()) ||
     p.dept.toLowerCase().includes(search.toLowerCase())
   );
+
+  const totalPositions = positions.length;
+  const totalOpen = positions.reduce((acc, p) => acc + (Number(p.openings) || 0), 0);
+  const totalFilled = positions.reduce((acc, p) => acc + (Number(p.filled) || 0), 0);
 
   return (
     <>
@@ -47,10 +101,10 @@ const JobPositionsView = () => {
 
       <div className="grid grid-cols-4 gap-4 mb-6">
         {[
-          { label: 'Total Positions', value: '8' },
-          { label: 'Open Vacancies', value: '10' },
-          { label: 'Filled Headcount', value: '32' },
-          { label: 'Avg. Salary Range', value: '₹24 LPA' },
+          { label: 'Total Positions', value: totalPositions },
+          { label: 'Open Vacancies', value: totalOpen },
+          { label: 'Filled Headcount', value: totalFilled },
+          { label: 'Avg. Salary Range', value: 'Competitive' },
         ].map((kpi, i) => (
           <div key={i} className="kpi-card">
             <div className="kpi-title">{kpi.label}</div>
@@ -83,33 +137,59 @@ const JobPositionsView = () => {
             </tr>
           </thead>
           <tbody>
-            {filtered.map(pos => {
-              const lc = levelColors[pos.level] || { bg: '#f7fafa', text: '#49636a' };
-              return (
-                <tr key={pos.id} style={{ cursor: 'pointer' }} onMouseEnter={e => e.currentTarget.style.background = '#f7fafa'} onMouseLeave={e => e.currentTarget.style.background = 'white'}>
-                  <td>
-                    <div className="font-bold text-[13px]" style={{ color: 'var(--text-primary)' }}>{pos.title}</div>
-                    <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>{pos.id}</div>
-                  </td>
-                  <td className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>{pos.dept}</td>
-                  <td><span style={{ background: lc.bg, color: lc.text, fontSize: '0.7rem', fontWeight: 700, padding: '0.2rem 0.5rem', borderRadius: '4px' }}>{pos.level}</span></td>
-                  <td className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>{pos.filled}</td>
-                  <td>
-                    <span style={{ color: pos.openings > 0 ? 'var(--secondary)' : 'var(--text-secondary)', fontWeight: 700, fontSize: '0.8rem' }}>{pos.openings}</span>
-                  </td>
-                  <td className="text-xs" style={{ color: 'var(--text-secondary)' }}>{pos.location}</td>
-                  <td className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>{pos.salary}</td>
-                  <td>
-                    <span style={{ background: pos.openings > 0 ? 'var(--surface-teal-tint)' : 'var(--surface-neutral)', color: pos.openings > 0 ? 'var(--secondary)' : 'var(--text-secondary)', fontSize: '0.7rem', fontWeight: 700, padding: '0.2rem 0.5rem', borderRadius: '4px' }}>
-                      {pos.openings > 0 ? 'Hiring' : 'Closed'}
-                    </span>
-                  </td>
-                </tr>
-              );
-            })}
+            {loading ? (
+              <tr>
+                <td colSpan="8" style={{ textAlign: 'center', padding: '48px 16px', color: 'var(--text-secondary)' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+                    <div style={{ width: '28px', height: '28px', border: '3px solid var(--border-structural)', borderTopColor: 'var(--primary)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}></div>
+                    <span style={{ fontSize: '13px', fontWeight: 500 }}>Connecting to PostgreSQL & loading job positions...</span>
+                  </div>
+                </td>
+              </tr>
+            ) : filtered.length === 0 ? (
+              <tr>
+                <td colSpan="8" style={{ textAlign: 'center', padding: '48px 16px', color: 'var(--text-secondary)' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ opacity: 0.4 }}>
+                      <rect width="20" height="14" x="2" y="7" rx="2" ry="2" /><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+                    </svg>
+                    <div style={{ fontWeight: 600, fontSize: '15px', color: 'var(--text-primary)' }}>No job positions found</div>
+                    <div style={{ fontSize: '13px', maxWidth: '360px' }}>
+                      {search ? 'No positions matched your search query.' : 'No job positions configured yet. Click "+ New Position" above to define roles.'}
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              filtered.map(pos => {
+                const lc = levelColors[pos.level] || { bg: '#f7fafa', text: '#49636a' };
+                return (
+                  <tr key={pos.id} style={{ cursor: 'pointer' }} onMouseEnter={e => e.currentTarget.style.background = '#f7fafa'} onMouseLeave={e => e.currentTarget.style.background = 'white'}>
+                    <td>
+                      <div className="font-bold text-[13px]" style={{ color: 'var(--text-primary)' }}>{pos.title}</div>
+                      <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>{pos.id}</div>
+                    </td>
+                    <td className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>{pos.dept}</td>
+                    <td><span style={{ background: lc.bg, color: lc.text, fontSize: '0.7rem', fontWeight: 700, padding: '0.2rem 0.5rem', borderRadius: '4px' }}>{pos.level}</span></td>
+                    <td className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>{pos.filled}</td>
+                    <td>
+                      <span style={{ color: pos.openings > 0 ? 'var(--secondary)' : 'var(--text-secondary)', fontWeight: 700, fontSize: '0.8rem' }}>{pos.openings}</span>
+                    </td>
+                    <td className="text-xs" style={{ color: 'var(--text-secondary)' }}>{pos.location}</td>
+                    <td className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>{pos.salary}</td>
+                    <td>
+                      <span style={{ background: pos.openings > 0 ? 'var(--surface-teal-tint)' : 'var(--surface-neutral)', color: pos.openings > 0 ? 'var(--secondary)' : 'var(--text-secondary)', fontSize: '0.7rem', fontWeight: 700, padding: '0.2rem 0.5rem', borderRadius: '4px' }}>
+                        {pos.openings > 0 ? 'Hiring' : 'Closed'}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
           </tbody>
         </table>
       </div>
+
     </>
   );
 };

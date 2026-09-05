@@ -1,4 +1,3 @@
-import uuid
 from datetime import datetime, time, timezone
 from decimal import Decimal
 
@@ -14,7 +13,6 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
-from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -32,32 +30,26 @@ class Schedule(Base):
     Total weekly hours are derived from child ScheduleLines.
     """
 
-    __tablename__ = "schedules"
+    __tablename__ = "working_schedules"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+    id: Mapped[int] = mapped_column(
+        Integer,
         primary_key=True,
-        server_default=text("gen_random_uuid()"),
-        default=uuid.uuid4,
-    )
-
-    company_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("companies.id", ondelete="RESTRICT"),
-        nullable=False,
-        index=True,
+        autoincrement=True,
     )
 
     name: Mapped[str] = mapped_column(
         String(100),
         nullable=False,
+        unique=True,
+        index=True,
     )
 
     calendar_type: Mapped[str] = mapped_column(
         String(50),
         nullable=False,
-        default="Standard 40 Hours/Week",
-        server_default=text("'Standard 40 Hours/Week'"),
+        default="STANDARD",
+        server_default=text("'STANDARD'"),
     )
 
     hours_per_week: Mapped[Decimal] = mapped_column(
@@ -72,13 +64,6 @@ class Schedule(Base):
         nullable=False,
         default=5,
         server_default=text("5"),
-    )
-
-    timezone: Mapped[str] = mapped_column(
-        String(50),
-        nullable=False,
-        default="Asia/Kolkata",
-        server_default=text("'Asia/Kolkata'"),
     )
 
     is_active: Mapped[bool] = mapped_column(
@@ -123,23 +108,22 @@ class ScheduleLine(Base):
                  4=Friday, 5=Saturday, 6=Sunday.
     """
 
-    __tablename__ = "schedule_lines"
+    __tablename__ = "working_schedule_days"
     __table_args__ = (
-        UniqueConstraint("schedule_id", "day_of_week", name="uq_schedule_lines_schedule_day"),
+        UniqueConstraint("schedule_id", "day_of_week", name="uq_working_schedule_days_schedule_day"),
         CheckConstraint("day_of_week BETWEEN 0 AND 6", name="ck_schedule_lines_day_of_week"),
-        CheckConstraint("work_hours >= 0 AND break_hours >= 0", name="ck_schedule_hours_positive"),
+        CheckConstraint("work_hours >= 0", name="ck_schedule_hours_positive"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+    id: Mapped[int] = mapped_column(
+        Integer,
         primary_key=True,
-        server_default=text("gen_random_uuid()"),
-        default=uuid.uuid4,
+        autoincrement=True,
     )
 
-    schedule_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("schedules.id", ondelete="CASCADE"),
+    schedule_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("working_schedules.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
@@ -159,11 +143,11 @@ class ScheduleLine(Base):
         nullable=False,
     )
 
-    break_hours: Mapped[Decimal] = mapped_column(
-        Numeric(4, 2),
+    break_minutes: Mapped[int] = mapped_column(
+        Integer,
         nullable=False,
-        default=Decimal("1.00"),
-        server_default=text("1.00"),
+        default=60,
+        server_default=text("60"),
     )
 
     work_hours: Mapped[Decimal] = mapped_column(
@@ -171,13 +155,6 @@ class ScheduleLine(Base):
         nullable=False,
         default=Decimal("8.00"),
         server_default=text("8.00"),
-    )
-
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        default=_utcnow,
-        server_default=text("now()"),
     )
 
     schedule: Mapped["Schedule"] = relationship(

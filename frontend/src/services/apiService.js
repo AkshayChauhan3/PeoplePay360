@@ -61,6 +61,19 @@ export const apiService = {
     return await apiClient.get('/api/v1/departments');
   },
 
+  async createDepartment(data) {
+    return await apiClient.post('/api/v1/departments', data);
+  },
+
+  async getJobPositions(params = {}) {
+    const query = new URLSearchParams(params).toString();
+    return await apiClient.get(`/api/v1/job-positions${query ? `?${query}` : ''}`);
+  },
+
+  async createJobPosition(data) {
+    return await apiClient.post('/api/v1/job-positions', data);
+  },
+
   // =========================================================================
   // 3. CONTRACTS
   // =========================================================================
@@ -112,24 +125,32 @@ export const apiService = {
     return await apiClient.post('/api/v1/timeoff/requests', data);
   },
 
+  async approveLeaveRequest(id) {
+    return await apiClient.post(`/api/v1/timeoff/requests/${id}/approve`, {});
+  },
+
+  async refuseLeaveRequest(id, reason = 'Rejected by HR Manager') {
+    return await apiClient.post(`/api/v1/timeoff/requests/${id}/refuse`, { refusal_reason: reason });
+  },
+
   // =========================================================================
   // 6. PAYROLL & SALARY RULES
   // =========================================================================
   async getPayruns() {
-    return await apiClient.get('/api/v1/payroll/payruns');
+    return await apiClient.get('/api/v1/payruns');
   },
 
   async getPayslips(params = {}) {
     const query = new URLSearchParams(params).toString();
-    return await apiClient.get(`/api/v1/payroll/payslips${query ? `?${query}` : ''}`);
+    return await apiClient.get(`/api/v1/payslips${query ? `?${query}` : ''}`);
   },
 
   async getSalaryStructures() {
-    return await apiClient.get('/api/v1/salary/structures');
+    return await apiClient.get('/api/v1/salary-structures');
   },
 
   async getSalaryRules() {
-    return await apiClient.get('/api/v1/salary/rules');
+    return await apiClient.get('/api/v1/salary-rules');
   },
 
   // =========================================================================

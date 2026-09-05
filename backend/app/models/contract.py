@@ -2,6 +2,7 @@ import enum
 import uuid
 from datetime import date, datetime, timezone
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     CheckConstraint,
@@ -12,13 +13,18 @@ from sqlalchemy import (
     Integer,
     Numeric,
     String,
-    Text,
     text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+
+if TYPE_CHECKING:
+    from app.models.department import Department
+    from app.models.employee import Employee
+    from app.models.job_position import JobPosition
+    from app.models.salary_structure import SalaryStructure
 
 
 def _utcnow() -> datetime:
@@ -29,7 +35,6 @@ class ContractStatus(str, enum.Enum):
     """
     Operational statuses for employment contracts.
     """
-
     DRAFT = "DRAFT"
     RUNNING = "RUNNING"
     EXPIRED = "EXPIRED"
@@ -38,10 +43,7 @@ class ContractStatus(str, enum.Enum):
 
 class Contract(Base):
     """
-    Employment Contract record.
-
-    Defines the compensation terms, working schedule, and salary structure
-    applicable to an employee for a designated time window.
+    Employment Contract record matching PostgreSQL table schema.
     """
 
     __tablename__ = "contracts"
@@ -53,11 +55,17 @@ class Contract(Base):
         CheckConstraint("wage >= 0", name="ck_contract_wage_positive"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+    id: Mapped[int] = mapped_column(
+        Integer,
         primary_key=True,
-        server_default=text("gen_random_uuid()"),
-        default=uuid.uuid4,
+        autoincrement=True,
+    )
+
+    contract_number: Mapped[str] = mapped_column(
+        String(50),
+        unique=True,
+        nullable=False,
+        index=True,
     )
 
     employee_id: Mapped[uuid.UUID] = mapped_column(
@@ -67,24 +75,24 @@ class Contract(Base):
         index=True,
     )
 
-    schedule_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("schedules.id", ondelete="RESTRICT"),
+    department_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("departments.id", ondelete="RESTRICT"),
         nullable=False,
         index=True,
     )
 
-    salary_structure_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
+    job_position_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("job_positions.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+
+    salary_structure_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("salary_structures.id", ondelete="SET NULL"),
         nullable=True,
-        index=True,
-        comment="Foreign-key-ready reference to salary_structures.id",
-    )
-
-    reference: Mapped[str] = mapped_column(
-        String(100),
-        unique=True,
-        nullable=False,
         index=True,
     )
 
@@ -104,15 +112,10 @@ class Contract(Base):
     )
 
     status: Mapped[ContractStatus] = mapped_column(
-        Enum(ContractStatus, name="contract_status", create_type=True),
+        Enum(ContractStatus, name="contractstatus", create_type=False),
         nullable=False,
         default=ContractStatus.DRAFT,
         server_default=text("'DRAFT'"),
-    )
-
-    notes: Mapped[str | None] = mapped_column(
-        Text,
-        nullable=True,
     )
 
     created_at: Mapped[datetime] = mapped_column(
@@ -130,32 +133,37 @@ class Contract(Base):
         server_default=text("now()"),
     )
 
-    salary_structure_id: Mapped[int | None] = mapped_column(
-        Integer,
-        ForeignKey("salary_structures.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
-
     # ------------------------------------------------------------------
     # Relationships
     # ------------------------------------------------------------------
-    employee: Mapped["Employee"] = relationship(  # noqa: F821
+    employee: Mapped["Employee"] = relationship(
         "Employee",
+        back_populates="contracts",
         foreign_keys=[employee_id],
         lazy="joined",
     )
 
-    salary_structure: Mapped["SalaryStructure | None"] = relationship(  # noqa: F821
-        "SalaryStructure",
-        back_populates="contracts",
-    )
-
-    schedule: Mapped["Schedule"] = relationship(  # noqa: F821
-        "Schedule",
-        foreign_keys=[schedule_id],
+    department: Mapped["Department"] = relationship(
+        "Department",
+        foreign_keys=[department_id],
         lazy="joined",
     )
 
+    job_position: Mapped["JobPosition"] = relationship(
+        "JobPosition",
+        foreign_keys=[job_position_id],
+        lazy="joined",
+    )
+
+    salary_structure: Mapped["SalaryStructure | None"] = relationship(
+        "SalaryStructure",
+        foreign_keys=[salary_structure_id],
+    )
+
+    # Alias for contract_number compatibility
+    @property
+    def reference(self) -> str:
+        return self.contract_number
+
     def __repr__(self) -> str:
-        return f"<Contract ref={self.reference!r} status={self.status} wage={self.wage}>"
+        return f"<Contract number={self.contract_number!r} status={self.status} wage={self.wage}>"

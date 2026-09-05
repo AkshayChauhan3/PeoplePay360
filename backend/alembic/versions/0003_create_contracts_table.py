@@ -49,7 +49,7 @@ def upgrade() -> None:
         "contracts",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
         sa.Column("contract_number", sa.String(50), nullable=False),
-        sa.Column("employee_id", sa.Integer(), nullable=False),
+        sa.Column("employee_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("department_id", sa.Integer(), nullable=False),
         sa.Column("job_position_id", sa.Integer(), nullable=False),
         sa.Column("salary_structure_id", sa.Integer(), nullable=True),

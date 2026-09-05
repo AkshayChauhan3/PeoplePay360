@@ -99,7 +99,7 @@ def upgrade() -> None:
     op.create_table(
         "attendances",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
-        sa.Column("employee_id", sa.Integer(), nullable=False),
+        sa.Column("employee_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("attendance_date", sa.Date(), nullable=False),
         sa.Column("check_in", sa.DateTime(timezone=True), nullable=False),
         sa.Column("check_out", sa.DateTime(timezone=True), nullable=True),

@@ -1,42 +1,51 @@
 import React, { useState, useEffect } from 'react';
 import { apiService } from '../services/apiService';
 
-const fallbackStructures = [
-  { id: 'SS-001', name: 'Executive Grade', level: 'C-Suite / VP', employees: 8, basicPct: 40, hra: 20, ta: 5, special: 25, pf: 12, tds: 'As applicable', totalCTC: '₹50–120 LPA' },
-  { id: 'SS-002', name: 'Senior Tech Band', level: 'L6–L7', employees: 22, basicPct: 40, hra: 20, ta: 5, special: 20, pf: 12, tds: '30%', totalCTC: '₹22–40 LPA' },
-  { id: 'SS-003', name: 'Mid Tech Band', level: 'L4–L5', employees: 64, basicPct: 40, hra: 20, ta: 5, special: 15, pf: 12, tds: '20%', totalCTC: '₹12–22 LPA' },
-  { id: 'SS-004', name: 'Junior Tech Band', level: 'L1–L3', employees: 38, basicPct: 40, hra: 20, ta: 5, special: 10, pf: 12, tds: '10%', totalCTC: '₹4–12 LPA' },
-  { id: 'SS-005', name: 'Sales & Growth Band', level: 'All Sales Roles', employees: 31, basicPct: 35, hra: 15, ta: 5, special: 20, pf: 12, tds: 'Variable', totalCTC: '₹8–55 LPA' },
-];
+const normalizeStructure = (s, idx) => {
+  const rules = s.rules || [];
+  const basicRule = rules.find(r => (r.code || '').toUpperCase() === 'BASIC');
+  const hraRule = rules.find(r => (r.code || '').toUpperCase() === 'HRA');
+  const pfRule = rules.find(r => (r.code || '').toUpperCase() === 'PF');
 
-const normalizeStructure = (s, idx) => ({
-  id: s.code || s.id || `SS-00${idx + 1}`,
-  name: s.name || 'Standard Structure',
-  level: s.level || 'All Employees',
-  employees: s.contract_count !== undefined ? s.contract_count : (s.employees || 25),
-  basicPct: s.basicPct || 40,
-  hra: s.hra || 20,
-  ta: s.ta || 5,
-  special: s.special || 20,
-  pf: s.pf || 12,
-  tds: s.tds || 'Variable',
-  totalCTC: s.totalCTC || 'Market Standard',
-});
+  return {
+    id: s.code || `SS-${String(s.id || idx + 1).padStart(3, '0')}`,
+    rawId: s.id,
+    name: s.name || 'Standard Structure',
+    level: s.description || 'Enterprise Grade',
+    employees: s.contract_count !== undefined ? s.contract_count : (s.employees || 'All Active'),
+    rulesCount: rules.length,
+    basicPct: basicRule?.percentage ? Number(basicRule.percentage) : 50,
+    hra: hraRule?.percentage ? Number(hraRule.percentage) : 40,
+    ta: 5,
+    special: 10,
+    pf: pfRule?.percentage ? Number(pfRule.percentage) : 12,
+    tds: 'Statutory Slab',
+    totalCTC: s.totalCTC || 'Dynamic Formula',
+    isActive: s.is_active !== undefined ? s.is_active : true,
+  };
+};
 
 const SalaryStructuresView = () => {
-  const [structures, setStructures] = useState(fallbackStructures);
+  const [structures, setStructures] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [newStruct, setNewStruct] = useState({ name: '', level: 'Mid Level', basicPct: 40, hra: 20, pf: 12, totalCTC: '₹15–25 LPA' });
 
   useEffect(() => {
     const fetchStructures = async () => {
+      setLoading(true);
+      setError(null);
       try {
         const data = await apiService.getSalaryStructures();
-        if (Array.isArray(data) && data.length > 0) {
-          setStructures(data.map(normalizeStructure));
-        }
+        const items = data?.items || (Array.isArray(data) ? data : []);
+        setStructures(items.map(normalizeStructure));
       } catch (err) {
-        console.warn('Using fallback salary structures:', err);
+        console.error('Failed to fetch salary structures:', err);
+        setError(err.message || 'Unable to load salary structures.');
+        setStructures([]);
+      } finally {
+        setLoading(false);
       }
     };
     fetchStructures();
@@ -84,28 +93,53 @@ const SalaryStructuresView = () => {
             </tr>
           </thead>
           <tbody>
-            {structures.map(s => (
-              <tr key={s.id} onMouseEnter={e => e.currentTarget.style.background = '#f7fafa'} onMouseLeave={e => e.currentTarget.style.background = 'white'}>
-                <td>
-                  <div className="font-bold text-[13px]" style={{ color: 'var(--text-primary)' }}>{s.name}</div>
-                  <div style={{ fontFamily: 'monospace', fontSize: '0.65rem', color: 'var(--text-secondary)' }}>{s.id}</div>
-                </td>
-                <td className="text-xs" style={{ color: 'var(--text-secondary)' }}>{s.level}</td>
-                <td className="text-xs font-bold" style={{ color: 'var(--secondary)' }}>{s.employees}</td>
-                <td className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>{s.basicPct}%</td>
-                <td className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>{s.hra}%</td>
-                <td className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>{s.ta}%</td>
-                <td className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>{s.special}%</td>
-                <td className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>{s.pf}%</td>
-                <td className="text-xs" style={{ color: 'var(--text-secondary)' }}>{s.tds}</td>
-                <td className="text-xs font-bold" style={{ color: 'var(--primary)' }}>{s.totalCTC}</td>
-                <td>
-                  <div className="flex gap-2">
-                    <button style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--secondary)', background: 'none', border: '1px solid var(--border-structural)', borderRadius: '4px', padding: '0.2rem 0.5rem', cursor: 'pointer' }}>Edit</button>
+            {loading ? (
+              <tr>
+                <td colSpan="11" style={{ textAlign: 'center', padding: '48px 16px', color: 'var(--text-secondary)' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+                    <div style={{ width: '28px', height: '28px', border: '3px solid var(--border-structural)', borderTopColor: 'var(--primary)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}></div>
+                    <span style={{ fontSize: '13px', fontWeight: 500 }}>Connecting to PostgreSQL & loading salary structures...</span>
                   </div>
                 </td>
               </tr>
-            ))}
+            ) : structures.length === 0 ? (
+              <tr>
+                <td colSpan="11" style={{ textAlign: 'center', padding: '48px 16px', color: 'var(--text-secondary)' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ opacity: 0.4 }}>
+                      <rect width="18" height="18" x="3" y="3" rx="2" /><path d="M3 9h18" /><path d="M9 21V9" />
+                    </svg>
+                    <div style={{ fontWeight: 600, fontSize: '15px', color: 'var(--text-primary)' }}>No salary structures configured</div>
+                    <div style={{ fontSize: '13px', maxWidth: '360px' }}>
+                      No salary structure bands found. Click "+ New Structure" above to define salary levels and component breakdowns.
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              structures.map(s => (
+                <tr key={s.id} onMouseEnter={e => e.currentTarget.style.background = '#f7fafa'} onMouseLeave={e => e.currentTarget.style.background = 'white'}>
+                  <td>
+                    <div className="font-bold text-[13px]" style={{ color: 'var(--text-primary)' }}>{s.name}</div>
+                    <div style={{ fontFamily: 'monospace', fontSize: '0.65rem', color: 'var(--text-secondary)' }}>{s.id}</div>
+                  </td>
+                  <td className="text-xs" style={{ color: 'var(--text-secondary)' }}>{s.level}</td>
+                  <td className="text-xs font-bold" style={{ color: 'var(--secondary)' }}>{s.employees}</td>
+                  <td className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>{s.basicPct}%</td>
+                  <td className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>{s.hra}%</td>
+                  <td className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>{s.ta}%</td>
+                  <td className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>{s.special}%</td>
+                  <td className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>{s.pf}%</td>
+                  <td className="text-xs" style={{ color: 'var(--text-secondary)' }}>{s.tds}</td>
+                  <td className="text-xs font-bold" style={{ color: 'var(--primary)' }}>{s.totalCTC}</td>
+                  <td>
+                    <div className="flex gap-2">
+                      <button style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--secondary)', background: 'none', border: '1px solid var(--border-structural)', borderRadius: '4px', padding: '0.2rem 0.5rem', cursor: 'pointer' }}>Edit</button>
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
