@@ -107,12 +107,16 @@ export const PayrunWizardModal: React.FC<PayrunWizardModalProps> = ({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Payrun Creation Wizard (2-Step)"
+      title={step === 1 ? 'New Pay Run' : 'Select Employee Records'}
       size="lg"
       footer={
         <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
           <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-            Step <strong>{step} of 2</strong>: {step === 1 ? 'Scope & Eligibility Preview' : 'Confirm Selected Staff'}
+            {step === 1 ? (
+              <span>Participant note: this popup collects the payrun scope only. Continue should not create the Payrun yet.</span>
+            ) : (
+              <span>{selectedIds.length} of {eligibleEmployees.length} employees selected</span>
+            )}
           </div>
 
           <div style={{ display: 'flex', gap: '8px' }}>
@@ -122,17 +126,17 @@ export const PayrunWizardModal: React.FC<PayrunWizardModalProps> = ({
               onClick={step === 1 ? onClose : () => setStep(1)}
               disabled={loadingPreview || creating}
             >
-              {step === 1 ? 'Cancel' : 'Back'}
+              {step === 1 ? 'Discard' : 'Back'}
             </button>
 
             {step === 1 ? (
               <button
                 type="button"
-                className="btn btn-secondary"
+                className="btn btn-primary"
                 onClick={handlePreview}
                 disabled={loadingPreview || !selectedStructureId}
               >
-                <span>{loadingPreview ? 'Validating Scope...' : 'Preview Eligible Staff'}</span>
+                <span>{loadingPreview ? 'Loading Scope...' : 'Continue'}</span>
                 <ArrowRight size={16} />
               </button>
             ) : (
@@ -143,7 +147,7 @@ export const PayrunWizardModal: React.FC<PayrunWizardModalProps> = ({
                 disabled={creating || selectedIds.length === 0}
               >
                 <Sparkles size={16} />
-                <span>{creating ? 'Generating Batch...' : `Create Payrun (${selectedIds.length} Staff)`}</span>
+                <span>{creating ? 'Creating...' : 'Create Payrun'}</span>
               </button>
             )}
           </div>

@@ -515,3 +515,14 @@
   border-color: var(--primary);
   box-shadow: var(--elevation-tier2);
 }
+
+.dropdown-nav-item {
+  color: var(--text-primary);
+  transition: all var(--transition-fast);
+}
+
+.dropdown-nav-item:hover {
+  background-color: var(--neutral-tint-purple);
+  color: var(--primary);
+  font-weight: 600;
+}

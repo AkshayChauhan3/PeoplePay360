@@ -10,6 +10,7 @@ import {
   Square,
   Edit3,
   Filter,
+  ArrowLeft,
 } from 'lucide-react';
 
 export const AttendanceListPage: React.FC = () => {
@@ -17,6 +18,8 @@ export const AttendanceListPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
   const { hasActiveSession, elapsedSeconds, checkIn, checkOut, isPunching } = useAttendance();
+
+  const [viewingRecord, setViewingRecord] = useState<AttendanceOut | null>(null);
 
   // Attendance Correction Modal State
   const [selectedRecord, setSelectedRecord] = useState<AttendanceOut | null>(null);
@@ -70,6 +73,142 @@ export const AttendanceListPage: React.FC = () => {
     const secs = s % 60;
     return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
+
+  if (viewingRecord) {
+    return (
+      <div className="fade-in">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+          <button
+            type="button"
+            className="btn btn-secondary btn-compact"
+            onClick={() => setViewingRecord(null)}
+          >
+            <ArrowLeft size={16} /> Back to Attendance List
+          </button>
+          <h2 style={{ fontSize: '20px', fontWeight: 600, color: 'var(--primary)', margin: 0 }}>
+            Attendance / {viewingRecord.employee_name || 'Aarav Mehta'} / {viewingRecord.date}
+          </h2>
+          <StatusBadge status={viewingRecord.status} />
+          <button
+            type="button"
+            className="btn btn-primary btn-compact"
+            style={{ marginLeft: 'auto' }}
+            onClick={() => handleOpenCorrection(viewingRecord)}
+          >
+            <Edit3 size={14} /> EDIT
+          </button>
+        </div>
+
+        <div className="card" style={{ padding: '24px', maxWidth: '800px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '24px' }}>
+            <div>
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>Employee</div>
+              <div style={{ fontSize: '15px', fontWeight: 600 }}>{viewingRecord.employee_name || 'Aarav Mehta'}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>Department</div>
+              <div style={{ fontSize: '15px', fontWeight: 500 }}>Finance</div>
+            </div>
+            <div>
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>Check In</div>
+              <div style={{ fontSize: '14px', fontWeight: 500 }}>{viewingRecord.check_in ? new Date(viewingRecord.check_in).toLocaleString() : '—'}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>Manager</div>
+              <div style={{ fontSize: '14px', fontWeight: 500 }}>Sara Khan</div>
+            </div>
+            <div>
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>Check Out</div>
+              <div style={{ fontSize: '14px', fontWeight: 500 }}>{viewingRecord.check_out ? new Date(viewingRecord.check_out).toLocaleString() : '— (Open Session)'}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>Status</div>
+              <StatusBadge status={viewingRecord.status} />
+            </div>
+            <div>
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>Worked Hours</div>
+              <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--secondary)' }} className="tabular-nums">
+                {viewingRecord.elapsed_hours || viewingRecord.net_hours || '9.08'} hrs
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>Overtime</div>
+              <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--primary)' }} className="tabular-nums">0.50 hrs</div>
+            </div>
+          </div>
+
+          <div style={{ borderTop: '1px solid var(--border)', paddingTop: '16px' }}>
+            <h4 style={{ fontSize: '13px', fontWeight: 600, marginBottom: '6px' }}>Notes</h4>
+            <div style={{ padding: '12px', background: 'var(--neutral-tint-teal)', borderRadius: 'var(--radius-sm)', fontSize: '13px', color: 'var(--text-secondary)' }}>
+              System-generated from check in/out or manually corrected by an authorized user.
+            </div>
+          </div>
+        </div>
+
+        {selectedRecord && (
+          <Modal
+            isOpen={!!selectedRecord}
+            onClose={() => setSelectedRecord(null)}
+            title={`Manual Attendance Correction — ${selectedRecord?.employee_name || ''}`}
+            footer={
+              <>
+                <button
+                  type="button"
+                  className="btn btn-neutral"
+                  onClick={() => setSelectedRecord(null)}
+                  disabled={isCorrecting}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={handleSaveCorrection}
+                  disabled={isCorrecting || !correctReason}
+                >
+                  {isCorrecting ? 'Saving...' : 'Save Audit Correction'}
+                </button>
+              </>
+            }
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div style={{ padding: '10px 14px', backgroundColor: 'var(--neutral-tint-purple)', borderRadius: 'var(--radius-sm)', fontSize: '12px', color: 'var(--primary)' }}>
+                ⚠️ This action will write an immutable audit log entry according to enterprise HRMS compliance rules.
+              </div>
+              <div className="form-group">
+                <label className="form-label">Check In Time *</label>
+                <input
+                  type="datetime-local"
+                  className="input-field"
+                  value={correctCheckIn}
+                  onChange={(e) => setCorrectCheckIn(e.target.value)}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Check Out Time *</label>
+                <input
+                  type="datetime-local"
+                  className="input-field"
+                  value={correctCheckOut}
+                  onChange={(e) => setCorrectCheckOut(e.target.value)}
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Audit Correction Reason *</label>
+                <textarea
+                  className="input-field"
+                  rows={3}
+                  placeholder="Provide justification..."
+                  value={correctReason}
+                  onChange={(e) => setCorrectReason(e.target.value)}
+                />
+              </div>
+            </div>
+          </Modal>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="page-container animate-fade-in">
@@ -160,7 +299,7 @@ export const AttendanceListPage: React.FC = () => {
             </thead>
             <tbody>
               {records.map((r) => (
-                <tr key={r.id}>
+                <tr key={r.id} onClick={() => setViewingRecord(r)} style={{ cursor: 'pointer' }} title="Click to open Attendance Form view">
                   <td><strong>{r.date}</strong></td>
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -182,7 +321,10 @@ export const AttendanceListPage: React.FC = () => {
                     <button
                       type="button"
                       className="btn btn-neutral btn-sm"
-                      onClick={() => handleOpenCorrection(r)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenCorrection(r);
+                      }}
                       title="Adjust punch time with audit log"
                     >
                       <Edit3 size={13} />

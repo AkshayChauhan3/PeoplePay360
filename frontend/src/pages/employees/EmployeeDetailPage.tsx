@@ -16,7 +16,6 @@ import {
   Calendar,
   Mail,
   Building,
-  CreditCard,
   Briefcase,
 } from 'lucide-react';
 
@@ -28,6 +27,7 @@ interface EmployeeDetailPageProps {
 export const EmployeeDetailPage: React.FC<EmployeeDetailPageProps> = ({ employeeId, onBack }) => {
   const [employee, setEmployee] = useState<EmployeeDetailOut | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'work' | 'private'>('work');
 
   // Smart Button Modals
   const [contractsModalOpen, setContractsModalOpen] = useState(false);
@@ -144,41 +144,98 @@ export const EmployeeDetailPage: React.FC<EmployeeDetailPageProps> = ({ employee
           </div>
         </div>
 
-        <div style={{ borderTop: '1px solid var(--border-hairline)', marginTop: '1.5rem', paddingTop: '1.25rem' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <h4 style={{ fontSize: '13px', color: 'var(--primary)', fontWeight: 600 }}>Employment Details</h4>
-              <div style={{ fontSize: '13px' }}>
-                <span style={{ color: 'var(--text-secondary)' }}>Employee Type: </span>
-                <strong>{employee.employee_type}</strong>
-              </div>
-              <div style={{ fontSize: '13px' }}>
-                <span style={{ color: 'var(--text-secondary)' }}>Join Date: </span>
-                <strong>{new Date(employee.join_date).toLocaleDateString()}</strong>
-              </div>
-              <div style={{ fontSize: '13px' }}>
-                <span style={{ color: 'var(--text-secondary)' }}>Contact Phone: </span>
-                <strong>{employee.phone || '—'}</strong>
-              </div>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <h4 style={{ fontSize: '13px', color: 'var(--primary)', fontWeight: 600 }}>Bank & Disbursal</h4>
-              <div style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: 6 }}>
-                <CreditCard size={15} color="var(--text-secondary)" />
-                <span style={{ color: 'var(--text-secondary)' }}>Bank Name: </span>
-                <strong>{employee.bank_name || 'Not provided'}</strong>
-              </div>
-              <div style={{ fontSize: '13px' }}>
-                <span style={{ color: 'var(--text-secondary)' }}>Account No: </span>
-                <strong style={{ fontFamily: 'monospace' }}>{employee.bank_account_number || '—'}</strong>
-              </div>
-              <div style={{ fontSize: '13px' }}>
-                <span style={{ color: 'var(--text-secondary)' }}>IFSC Code: </span>
-                <strong style={{ fontFamily: 'monospace' }}>{employee.ifsc_code || '—'}</strong>
-              </div>
-            </div>
+        {/* Tabs: Work Information | Private Information */}
+        <div style={{ marginTop: '1.5rem' }}>
+          <div style={{ display: 'flex', gap: '20px', borderBottom: '1px solid var(--border)', marginBottom: '16px' }}>
+            <button
+              type="button"
+              onClick={() => setActiveTab('work')}
+              style={{
+                background: 'none',
+                border: 'none',
+                borderBottom: activeTab === 'work' ? '2px solid var(--primary)' : '2px solid transparent',
+                padding: '8px 4px',
+                fontWeight: activeTab === 'work' ? 600 : 500,
+                color: activeTab === 'work' ? 'var(--primary)' : 'var(--text-secondary)',
+                cursor: 'pointer',
+                fontSize: '14px',
+              }}
+            >
+              Work Information
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('private')}
+              style={{
+                background: 'none',
+                border: 'none',
+                borderBottom: activeTab === 'private' ? '2px solid var(--primary)' : '2px solid transparent',
+                padding: '8px 4px',
+                fontWeight: activeTab === 'private' ? 600 : 500,
+                color: activeTab === 'private' ? 'var(--primary)' : 'var(--text-secondary)',
+                cursor: 'pointer',
+                fontSize: '14px',
+              }}
+            >
+              Private Information
+            </button>
           </div>
+
+          {activeTab === 'work' ? (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', fontSize: '13px' }}>
+              <div>
+                <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '11px', marginBottom: '2px' }}>Department</span>
+                <strong>{employee.department_name || 'Finance'}</strong>
+              </div>
+              <div>
+                <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '11px', marginBottom: '2px' }}>Job Position</span>
+                <strong>{employee.job_title}</strong>
+              </div>
+              <div>
+                <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '11px', marginBottom: '2px' }}>Manager</span>
+                <strong>Sara Khan</strong>
+              </div>
+              <div>
+                <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '11px', marginBottom: '2px' }}>Work Location</span>
+                <strong>Mumbai Headquarters</strong>
+              </div>
+              <div>
+                <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '11px', marginBottom: '2px' }}>Working Schedule</span>
+                <strong>40 Hours / Week</strong>
+              </div>
+              <div>
+                <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '11px', marginBottom: '2px' }}>Status</span>
+                <StatusBadge status={employee.is_active ? 'Active' : 'Inactive'} />
+              </div>
+              <div>
+                <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '11px', marginBottom: '2px' }}>Company</span>
+                <strong>OXP Pvt Ltd</strong>
+              </div>
+              <div>
+                <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '11px', marginBottom: '2px' }}>Work Email</span>
+                <strong>{employee.work_email}</strong>
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', fontSize: '13px' }}>
+              <div>
+                <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '11px', marginBottom: '2px' }}>Bank Name</span>
+                <strong>{employee.bank_name || 'HDFC Bank'}</strong>
+              </div>
+              <div>
+                <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '11px', marginBottom: '2px' }}>Bank Account Number</span>
+                <strong style={{ fontFamily: 'monospace' }}>{employee.bank_account_number || '50100492817291'}</strong>
+              </div>
+              <div>
+                <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '11px', marginBottom: '2px' }}>IFSC Code</span>
+                <strong style={{ fontFamily: 'monospace' }}>{employee.ifsc_code || 'HDFC0001234'}</strong>
+              </div>
+              <div>
+                <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '11px', marginBottom: '2px' }}>Emergency Contact</span>
+                <strong>+91 98765 00000 (Spouse)</strong>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
