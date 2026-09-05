@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api import auth, health
+from app.api import attendance, auth, health, payroll, timeoff
 from app.core.config import settings
 
 # ---------------------------------------------------------------------------
@@ -38,6 +38,9 @@ API_PREFIX = "/api/v1"
 
 app.include_router(health.router, prefix=API_PREFIX)
 app.include_router(auth.router, prefix=API_PREFIX)
+app.include_router(attendance.router, prefix=API_PREFIX)
+app.include_router(payroll.router, prefix=API_PREFIX)
+app.include_router(timeoff.router, prefix=API_PREFIX)
 
 # ---------------------------------------------------------------------------
 # Global exception handlers
