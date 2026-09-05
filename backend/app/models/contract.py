@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from app.models.department import Department
     from app.models.employee import Employee
     from app.models.job_position import JobPosition
+    from app.models.salary_structure import SalaryStructure
 
 
 class ContractStatus(str, enum.Enum):
@@ -98,10 +99,11 @@ class Contract(Base):
         nullable=False,
     )
 
-    # Reserved for future salary structure engine (e.g., allowances, deductions formula).
-    # Nullable, without a foreign key constraint until the Salary Structure module is built.
+    # Salary structure template determining remuneration rules for this contract.
     salary_structure_id: Mapped[int | None] = mapped_column(
         Integer,
+        ForeignKey("salary_structures.id", ondelete="SET NULL"),
+        index=True,
         nullable=True,
         default=None,
     )
@@ -172,6 +174,13 @@ class Contract(Base):
     # Associated job position
     job_position: Mapped["JobPosition"] = relationship(
         "JobPosition",
+        lazy="selectin",
+    )
+
+    # Associated salary structure
+    salary_structure: Mapped["SalaryStructure | None"] = relationship(
+        "SalaryStructure",
+        back_populates="contracts",
         lazy="selectin",
     )
 

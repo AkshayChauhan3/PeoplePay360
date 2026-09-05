@@ -31,6 +31,7 @@ from app.schemas.employee import (
     EmployeeUpdate,
     LinkUserRequest,
 )
+from app.schemas.payslip import PayslipListResponse
 from app.schemas.time_off import (
     TimeOffAllocationResponse,
     TimeOffBalanceResponse,
@@ -41,6 +42,7 @@ from app.services import (
     attendance_service,
     contract_service,
     employee_service,
+    payslip_service,
     time_off_allocation_service,
     time_off_request_service,
 )
@@ -324,6 +326,40 @@ async def get_my_time_off_balances(
 
 
 # ---------------------------------------------------------------------------
+# 3f. Self-Service Current Employee Payslips
+# ---------------------------------------------------------------------------
+@router.get(
+    "/me/payslips",
+    response_model=PayslipListResponse,
+    summary="Get current logged-in employee payslips",
+)
+async def get_my_payslips(
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> PayslipListResponse:
+    """Retrieve payslip history for the currently authenticated employee."""
+    if current_user.employee_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current user account is not linked to an employee profile.",
+        )
+    items, total = await payslip_service.get_employee_payslips(
+        db=db,
+        employee_id=current_user.employee_id,
+        skip=skip,
+        limit=limit,
+    )
+    return PayslipListResponse(
+        items=[payslip_service.serialize_payslip_response(p) for p in items],
+        total=total,
+        skip=skip,
+        limit=limit,
+    )
+
+
+# ---------------------------------------------------------------------------
 # 4. Get Employee by ID
 # ---------------------------------------------------------------------------
 @router.get(
@@ -591,4 +627,50 @@ async def get_employee_time_off_balances(
             detail="You do not have permission to view leave balances for other employees.",
         )
     return await time_off_allocation_service.get_employee_balances(db, employee_id)
+
+
+# ---------------------------------------------------------------------------
+# 13. Employee Payslips
+# ---------------------------------------------------------------------------
+@router.get(
+    "/{employee_id}/payslips",
+    response_model=PayslipListResponse,
+    summary="Get employee payslip history",
+)
+async def get_employee_payslips(
+    employee_id: int,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> PayslipListResponse:
+    """
+    List all payslips for a specific employee.
+    Allowed for Payroll staff/Admin, or the employee themselves.
+    """
+    is_payroll_staff = current_user.role_name in {
+        UserRole.ADMIN.value,
+        UserRole.HR_PAYROLL_MANAGER.value,
+        UserRole.HR_PAYROLL_USER.value,
+    }
+    is_owner_employee = current_user.employee_id == employee_id
+
+    if not is_payroll_staff and not is_owner_employee:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to view payslips for other employees.",
+        )
+
+    items, total = await payslip_service.get_employee_payslips(
+        db=db,
+        employee_id=employee_id,
+        skip=skip,
+        limit=limit,
+    )
+    return PayslipListResponse(
+        items=[payslip_service.serialize_payslip_response(p) for p in items],
+        total=total,
+        skip=skip,
+        limit=limit,
+    )
 

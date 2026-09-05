@@ -1,6 +1,6 @@
 # PeoplePay360 — Database Schema & RBAC Permissions Reference
 
-**Version**: `0.0.5` (Phase 5: Time Off Management)  
+**Version**: `0.0.7` (Phase 7: Payruns & Payslips)  
 **Database**: PostgreSQL 18+ (Async engine via `asyncpg`)  
 **ORM**: SQLAlchemy 2.x  
 **Migration Tool**: Alembic  
@@ -27,6 +27,16 @@ erDiagram
     EMPLOYEES ||--o{ TIME_OFF_ALLOCATIONS : "receives"
     EMPLOYEES ||--o{ TIME_OFF_REQUESTS : "submits"
     TIME_OFF_ALLOCATIONS ||--o{ TIME_OFF_REQUESTS : "consumed by"
+    CONTRACTS }o--o| SALARY_STRUCTURES : "governed by (salary_structure_id)"
+    SALARY_STRUCTURES ||--o{ SALARY_RULES : "contains"
+    SALARY_STRUCTURES ||--o{ PAYRUNS : "governs (salary_structure_id)"
+    PAYRUNS ||--o{ PAYSLIPS : "contains (payrun_id)"
+    EMPLOYEES ||--o{ PAYSLIPS : "receives (employee_id)"
+    CONTRACTS ||--o{ PAYSLIPS : "remunerates (contract_id)"
+    SALARY_STRUCTURES ||--o{ PAYSLIPS : "templates (salary_structure_id)"
+    PAYSLIPS ||--o{ PAYSLIP_LINES : "contains (payslip_id)"
+    SALARY_RULES ||--o{ PAYSLIP_LINES : "snapshots (salary_rule_id)"
+
 
     ROLES {
         int id PK "autoincrement"
@@ -182,7 +192,76 @@ erDiagram
         timestamptz created_at "default now()"
         timestamptz updated_at "default now()"
     }
+
+    SALARY_STRUCTURES {
+        int id PK "autoincrement"
+        varchar name UK "e.g. Standard Full-Time Structure"
+        varchar code UK "normalized uppercase e.g. STD_STRUCT"
+        varchar description "nullable"
+        boolean is_active "default true"
+        timestamptz created_at "default now()"
+        timestamptz updated_at "default now()"
+    }
+
+    SALARY_RULES {
+        int id PK "autoincrement"
+        int salary_structure_id FK "-> salary_structures.id"
+        varchar name "e.g. Basic Salary"
+        varchar code "normalized uppercase e.g. BASIC"
+        salaryrulecategory category "BASIC, ALLOWANCE, GROSS, DEDUCTION, NET"
+        int sequence "order of execution"
+        computationtype computation_type "FIXED, PERCENTAGE, FORMULA"
+        numeric fixed_amount "precision 12, scale 2 (nullable)"
+        numeric percentage "precision 5, scale 2 (nullable)"
+        varchar percentage_base "nullable"
+        varchar formula "nullable"
+        boolean is_active "default true"
+        timestamptz created_at "default now()"
+        timestamptz updated_at "default now()"
+    }
+
+    PAYRUNS {
+        int id PK "autoincrement"
+        varchar name "e.g. September 2026 Payroll"
+        int salary_structure_id FK "-> salary_structures.id"
+        date period_start
+        date period_end
+        payrunstatus status "DRAFT, COMPUTED, VALIDATED, PAID, CANCELLED"
+        int created_by FK "-> users.id (nullable)"
+        timestamptz created_at "default now()"
+        timestamptz updated_at "default now()"
+    }
+
+    PAYSLIPS {
+        int id PK "autoincrement"
+        int payrun_id FK "-> payruns.id"
+        int employee_id FK "-> employees.id"
+        int contract_id FK "-> contracts.id"
+        int salary_structure_id FK "-> salary_structures.id"
+        date period_start
+        date period_end
+        payslipstatus status "DRAFT, COMPUTED, VALIDATED, PAID, CANCELLED"
+        numeric worked_days "precision 5, scale 2, default 0.00"
+        numeric gross_amount "precision 12, scale 2, default 0.00"
+        numeric deduction_amount "precision 12, scale 2, default 0.00"
+        numeric net_amount "precision 12, scale 2, default 0.00"
+        timestamptz created_at "default now()"
+        timestamptz updated_at "default now()"
+    }
+
+    PAYSLIP_LINES {
+        int id PK "autoincrement"
+        int payslip_id FK "-> payslips.id"
+        int salary_rule_id FK "-> salary_rules.id (nullable)"
+        varchar code "e.g. BASIC, HRA, PF"
+        varchar name "e.g. Basic Salary"
+        salaryrulecategory category "BASIC, ALLOWANCE, GROSS, DEDUCTION, NET"
+        int sequence "order of execution"
+        numeric amount "precision 12, scale 2, historical snapshot"
+        timestamptz created_at "default now()"
+    }
 ```
+
 
 ---
 
@@ -452,7 +531,122 @@ Employee leave requests, approvals, refusals, and balance consumption.
 
 ---
 
+### 2.11. `salary_structures` Table
+Grouped configuration templates defining the rules and policies for employee remuneration.
+
+| Column | Type | Nullable | Default | Constraints | Description |
+|---|---|---|---|---|---|
+| `id` | `INTEGER` | `NO` | *autoincrement* | `PRIMARY KEY` | Unique structure ID |
+| `name` | `VARCHAR(100)` | `NO` | — | `UNIQUE`, `INDEXED` | Template display title |
+| `code` | `VARCHAR(50)` | `NO` | — | `UNIQUE`, `INDEXED` | Normalized uppercase code (e.g. `STD_CORP`) |
+| `description` | `VARCHAR(255)` | `YES` | `NULL` | — | Structure description |
+| `is_active` | `BOOLEAN` | `NO` | `true` | — | Active status flag |
+| `created_at` | `TIMESTAMPTZ` | `NO` | `now()` | — | Creation timestamp (UTC) |
+| `updated_at` | `TIMESTAMPTZ` | `NO` | `now()` | — | Update timestamp (UTC) |
+
+---
+
+### 2.12. `salary_rules` Table
+Ordered calculation line items representing earnings, allowances, gross totals, deductions, and net pay.
+
+| Column | Type | Nullable | Default | Constraints | Description |
+|---|---|---|---|---|---|
+| `id` | `INTEGER` | `NO` | *autoincrement* | `PRIMARY KEY` | Unique rule ID |
+| `salary_structure_id` | `INTEGER` | `NO` | — | `FK -> salary_structures.id (CASCADE)`, `INDEXED` | Parent structure |
+| `name` | `VARCHAR(100)` | `NO` | — | — | Rule display name |
+| `code` | `VARCHAR(50)` | `NO` | — | `INDEXED` | Uppercase identifier (e.g. `BASIC`, `HRA`) |
+| `category` | `salaryrulecategory` | `NO` | — | `INDEXED` | Rule categorization |
+| `sequence` | `INTEGER` | `NO` | `10` | `INDEXED` | Order of rule execution |
+| `computation_type` | `computationtype` | `NO` | — | — | Method (`FIXED`, `PERCENTAGE`, `FORMULA`) |
+| `fixed_amount` | `NUMERIC(12, 2)` | `YES` | `NULL` | — | Fixed monetary value |
+| `percentage` | `NUMERIC(5, 2)` | `YES` | `NULL` | — | Percentage rate (0.00 to 100.00) |
+| `percentage_base` | `VARCHAR(50)` | `YES` | `NULL` | — | Code of referenced earlier rule |
+| `formula` | `VARCHAR(255)` | `YES` | `NULL` | — | Restricted safe mathematical formula |
+| `is_active` | `BOOLEAN` | `NO` | `true` | — | Active status flag |
+| `created_at` | `TIMESTAMPTZ` | `NO` | `now()` | — | Creation timestamp (UTC) |
+| `updated_at` | `TIMESTAMPTZ` | `NO` | `now()` | — | Update timestamp (UTC) |
+
+**Constraints**:
+- `UNIQUE (salary_structure_id, code)`: Rule codes must be unique per structure.
+- `UNIQUE (salary_structure_id, sequence)`: Rule sequence numbers must be unique per structure.
+
+---
+
+### 2.13. `payruns` Table
+Organizational payroll batches governing accounting windows and payslip collections.
+
+| Column | Type | Nullable | Default | Constraints | Description |
+|---|---|---|---|---|---|
+| `id` | `INTEGER` | `NO` | *autoincrement* | `PRIMARY KEY` | Unique payrun ID |
+| `name` | `VARCHAR(100)` | `NO` | — | — | Payroll batch title (e.g. Sept 2026 Payroll) |
+| `salary_structure_id` | `INTEGER` | `NO` | — | `FK -> salary_structures.id (RESTRICT)`, `INDEXED` | Applied salary structure template |
+| `period_start` | `DATE` | `NO` | — | `INDEXED` | Start date of payroll period |
+| `period_end` | `DATE` | `NO` | — | `INDEXED` | End date of payroll period |
+| `status` | `payrunstatus` | `NO` | `'DRAFT'` | `INDEXED` | Lifecycle status |
+| `created_by` | `INTEGER` | `YES` | `NULL` | `FK -> users.id (SET NULL)`, `INDEXED` | Creator user ID |
+| `created_at` | `TIMESTAMPTZ` | `NO` | `now()` | — | Creation timestamp (UTC) |
+| `updated_at` | `TIMESTAMPTZ` | `NO` | `now()` | — | Update timestamp (UTC) |
+
+#### Custom PostgreSQL Enum: `payrunstatus`
+- `DRAFT`: Newly initialized payroll batch with draft payslips.
+- `COMPUTED`: Calculation engine executed across all employee payslips.
+- `VALIDATED`: Verified by payroll management; locked against modifications.
+- `PAID`: Finalized accounting settlement state; historically frozen.
+- `CANCELLED`: Voided batch.
+
+---
+
+### 2.14. `payslips` Table
+Individual employee salary statement for a specific payrun window.
+
+| Column | Type | Nullable | Default | Constraints | Description |
+|---|---|---|---|---|---|
+| `id` | `INTEGER` | `NO` | *autoincrement* | `PRIMARY KEY` | Unique payslip ID |
+| `payrun_id` | `INTEGER` | `NO` | — | `FK -> payruns.id (CASCADE)`, `INDEXED` | Parent payrun batch |
+| `employee_id` | `INTEGER` | `NO` | — | `FK -> employees.id (RESTRICT)`, `INDEXED` | Employee recipient |
+| `contract_id` | `INTEGER` | `NO` | — | `FK -> contracts.id (RESTRICT)`, `INDEXED` | Applicable running contract |
+| `salary_structure_id` | `INTEGER` | `NO` | — | `FK -> salary_structures.id (RESTRICT)`, `INDEXED` | Applied structure template |
+| `period_start` | `DATE` | `NO` | — | `INDEXED` | Accounting period start |
+| `period_end` | `DATE` | `NO` | — | `INDEXED` | Accounting period end |
+| `status` | `payslipstatus` | `NO` | `'DRAFT'` | `INDEXED` | Lifecycle status |
+| `worked_days` | `NUMERIC(5, 2)` | `NO` | `0.00` | — | Total attendance worked days |
+| `gross_amount` | `NUMERIC(12, 2)` | `NO` | `0.00` | — | Gross earnings total |
+| `deduction_amount` | `NUMERIC(12, 2)` | `NO` | `0.00` | — | Deductions total |
+| `net_amount` | `NUMERIC(12, 2)` | `NO` | `0.00` | — | Net payable remuneration |
+| `created_at` | `TIMESTAMPTZ` | `NO` | `now()` | — | Creation timestamp (UTC) |
+| `updated_at` | `TIMESTAMPTZ` | `NO` | `now()` | — | Update timestamp (UTC) |
+
+**Constraints**:
+- `UNIQUE (employee_id, period_start, period_end)` named `uq_payslips_employee_period`.
+
+#### Custom PostgreSQL Enum: `payslipstatus`
+- `DRAFT`: Draft payslip initialized by wizard.
+- `COMPUTED`: Real-time operational data gathered and rules calculated.
+- `VALIDATED`: Confirmed accurate and ready for settlement.
+- `PAID`: Payment finalized; historically frozen.
+- `CANCELLED`: Excluded or voided payslip.
+
+---
+
+### 2.15. `payslip_lines` Table
+Immutable historical snapshot of an evaluated salary rule line item.
+
+| Column | Type | Nullable | Default | Constraints | Description |
+|---|---|---|---|---|---|
+| `id` | `INTEGER` | `NO` | *autoincrement* | `PRIMARY KEY` | Unique line item ID |
+| `payslip_id` | `INTEGER` | `NO` | — | `FK -> payslips.id (CASCADE)`, `INDEXED` | Parent payslip |
+| `salary_rule_id` | `INTEGER` | `YES` | `NULL` | `FK -> salary_rules.id (SET NULL)`, `INDEXED` | Originating rule template |
+| `code` | `VARCHAR(50)` | `NO` | — | — | Snapshot rule code (e.g. `BASIC`) |
+| `name` | `VARCHAR(100)` | `NO` | — | — | Snapshot rule name |
+| `category` | `salaryrulecategory` | `NO` | — | — | Snapshot rule category |
+| `sequence` | `INTEGER` | `NO` | `10` | — | Execution sequence number |
+| `amount` | `NUMERIC(12, 2)` | `NO` | `0.00` | — | Evaluated monetary amount |
+| `created_at` | `TIMESTAMPTZ` | `NO` | `now()` | — | Creation timestamp (UTC) |
+
+---
+
 ## 3. RBAC Permissions Matrix
+
 
 Access control is enforced at the route level using FastAPI dependency injection (`require_role(...)`).
 
@@ -538,6 +732,36 @@ Access control is enforced at the route level using FastAPI dependency injection
 | `/api/v1/employees/{id}/time-off/allocations` | `GET` | View employee allocations | ✅ *(own only)* | ✅ | ✅ | ✅ | ✅ |
 | `/api/v1/employees/{id}/time-off/requests` | `GET` | View employee requests | ✅ *(own only)* | ✅ | ✅ | ✅ | ✅ |
 | `/api/v1/employees/{id}/time-off/balances` | `GET` | View employee balances | ✅ *(own only)* | ✅ | ✅ | ✅ | ✅ |
+| **Salary Structures** | | | | | | | |
+| `/api/v1/salary-structures` | `GET` | List salary structures | ❌ `403` | ❌ `403` | ✅ | ✅ | ✅ |
+| `/api/v1/salary-structures` | `POST` | Create salary structure | ❌ `403` | ❌ `403` | ❌ `403` | ✅ | ✅ |
+| `/api/v1/salary-structures/{id}` | `GET` | Get salary structure by ID | ❌ `403` | ❌ `403` | ✅ | ✅ | ✅ |
+| `/api/v1/salary-structures/{id}` | `PATCH` | Update salary structure | ❌ `403` | ❌ `403` | ❌ `403` | ✅ | ✅ |
+| `/api/v1/salary-structures/{id}` | `DELETE` | Soft-deactivate salary structure | ❌ `403` | ❌ `403` | ❌ `403` | ✅ | ✅ |
+| `/api/v1/salary-structures/{id}/rules` | `GET` | List structure rules | ❌ `403` | ❌ `403` | ✅ | ✅ | ✅ |
+| `/api/v1/salary-structures/{id}/preview` | `POST` | Stateless calculation preview | ❌ `403` | ❌ `403` | ✅ | ✅ | ✅ |
+| **Salary Rules** | | | | | | | |
+| `/api/v1/salary-rules` | `GET` | List salary rules (filtered) | ❌ `403` | ❌ `403` | ✅ | ✅ | ✅ |
+| `/api/v1/salary-rules` | `POST` | Create salary rule | ❌ `403` | ❌ `403` | ❌ `403` | ✅ | ✅ |
+| `/api/v1/salary-rules/{id}` | `GET` | Get salary rule by ID | ❌ `403` | ❌ `403` | ✅ | ✅ | ✅ |
+| `/api/v1/salary-rules/{id}` | `PATCH` | Update salary rule | ❌ `403` | ❌ `403` | ❌ `403` | ✅ | ✅ |
+| `/api/v1/salary-rules/{id}` | `DELETE` | Delete salary rule | ❌ `403` | ❌ `403` | ❌ `403` | ✅ | ✅ |
+| **Payruns** | | | | | | | |
+| `/api/v1/payruns/preview` | `POST` | Wizard Step 1: Preview payroll eligibility | ❌ `403` | ✅ | ✅ | ❌ `403` | ✅ |
+| `/api/v1/payruns` | `POST` | Wizard Step 2: Create draft payrun batch | ❌ `403` | ❌ `403` | ✅ | ❌ `403` | ✅ |
+| `/api/v1/payruns` | `GET` | List payruns (filtered/paginated) | ❌ `403` | ✅ | ✅ | ❌ `403` | ✅ |
+| `/api/v1/payruns/{id}` | `GET` | Get payrun details | ❌ `403` | ✅ | ✅ | ❌ `403` | ✅ |
+| `/api/v1/payruns/{id}/compute` | `POST` | Execute calculation engine on payrun | ❌ `403` | ❌ `403` | ✅ | ❌ `403` | ✅ |
+| `/api/v1/payruns/{id}/validate` | `POST` | Audit & validate payrun | ❌ `403` | ❌ `403` | ✅ | ❌ `403` | ✅ |
+| `/api/v1/payruns/{id}/mark-paid` | `POST` | Mark payrun as paid & freeze records | ❌ `403` | ❌ `403` | ✅ | ❌ `403` | ✅ |
+| `/api/v1/payruns/{id}/cancel` | `POST` | Cancel active payrun | ❌ `403` | ❌ `403` | ✅ | ❌ `403` | ✅ |
+| `/api/v1/payruns/{id}` | `DELETE` | Delete draft or cancelled payrun | ❌ `403` | ❌ `403` | ✅ | ❌ `403` | ✅ |
+| `/api/v1/payruns/{id}/payslips` | `GET` | List payslips in payrun | ❌ `403` | ✅ | ✅ | ❌ `403` | ✅ |
+| **Payslips** | | | | | | | |
+| `/api/v1/payslips` | `GET` | List all payslips (filtered/paginated) | ❌ `403` | ✅ | ✅ | ❌ `403` | ✅ |
+| `/api/v1/payslips/{id}` | `GET` | Get payslip details & line snapshots | ✅ *(own only)* | ✅ | ✅ | ❌ `403` | ✅ |
+| `/api/v1/employees/me/payslips` | `GET` | View own payslip history | ✅ *(if linked)* | ✅ | ✅ | ✅ | ✅ |
+| `/api/v1/employees/{id}/payslips` | `GET` | View employee payslips | ✅ *(own only)* | ✅ | ✅ | ❌ `403` | ✅ |
 
 ---
 
@@ -621,6 +845,52 @@ Access control is enforced at the route level using FastAPI dependency injection
     - If an approved request is cancelled, `consumed_quantity` is atomically decremented by `requested_quantity`, immediately restoring the employee's balance.
     - Refusals require a non-empty `refusal_reason` (`400 Bad Request`).
     - Self-approval is strictly forbidden: managers and HR cannot approve or refuse their own leave requests (`400 Bad Request`).
+
+17. **Salary Structure Remuneration Modeling & Deactivation Protection**:
+    - Salary structures define compensation rules executed strictly in ascending `sequence` order.
+    - Soft deactivation of a structure (`is_active = false`) is guarded: if active `RUNNING` contracts reference the structure, deactivation is rejected with `400 Bad Request`.
+
+18. **Scoped Uniqueness for Salary Rules**:
+    - Rule codes are unique within their parent structure (`UNIQUE (salary_structure_id, code)`). This allows different structures to define their own `BASIC`, `HRA`, `PF`, etc.
+    - Execution sequence numbers are unique within their parent structure (`UNIQUE (salary_structure_id, sequence)`).
+
+19. **AST-Based Formula Evaluation & Sandboxing**:
+    - Formulas are evaluated using an Abstract Syntax Tree (AST) parser without `eval()` or `exec()`.
+    - Whitelisted nodes only: basic arithmetic (`+`, `-`, `*`, `/`), numbers, and identifiers (rule codes or context metrics like `contract_wage`, `worked_days`, `overtime_minutes`).
+    - Attempting calls, imports (`__import__`), attribute access (`x.__class__`), or builtins is rejected at configuration time with `422 Unprocessable Content`.
+
+20. **Dependency Ordering, Cycle Detection & Financial Precision**:
+    - Percentage rules require a valid `percentage_base` referring to an earlier sequence rule in the same structure.
+    - Formula rules require all referenced rule codes to have strictly lower sequence numbers.
+    - Circular dependencies ($A \to B \to A$) are detected and rejected via DFS graph traversal at rule creation/update.
+    - All financial calculations strictly use Python `Decimal` with documented `ROUND_HALF_UP` to 2 decimal places (`Decimal("0.01")`).
+
+21. **Two-Step Payrun Creation Wizard & Pre-computation Eligibility Filter**:
+    - Step 1 (`POST /api/v1/payruns/preview`): Read-only pre-flight inspection. Dynamically evaluates all employees against the specified salary structure and accounting date window (`period_start` to `period_end`). Categorizes employees into `eligible_employees` (active status, active running contract covering the period, assigned to the selected salary structure, and no duplicate payslip in the period) and `ineligible_employees` (with precise reasons: missing contract, inactive status, structure mismatch, or period collision). Returns system audit warnings.
+    - Step 2 (`POST /api/v1/payruns`): Instantiates the `Payrun` in `DRAFT` status and generates associated `Payslip` records in `DRAFT` status for either explicitly selected `employee_ids` or all eligible employees.
+
+22. **Duplicate Payslip Protection & Period Exclusivity**:
+    - Database composite unique constraint `uq_payslips_employee_period (employee_id, period_start, period_end)` guarantees an employee cannot receive more than one payslip for the exact same accounting period.
+    - Payrun Creation Wizard validates employee eligibility and rejects attempts to create payslips for employees who already have a payslip in that period (`400 Bad Request`).
+
+23. **Itemized Historical Immutability (`payslip_lines`)**:
+    - When a payrun is computed, each salary rule is evaluated in sequence and snapshotted into `payslip_lines` (`code`, `name`, `category`, `sequence`, `amount`).
+    - Subsequent modifications or deletions of master `SalaryRule` or `SalaryStructure` templates have zero effect on already-computed or finalized payslips, preserving auditable historical payroll records.
+
+24. **Strict Lifecycle State Machine & Transition Guards**:
+    - Payrun progression follows strict states: `DRAFT` -> `COMPUTED` -> `VALIDATED` -> `PAID`.
+    - `compute`: Allowed only from `DRAFT` or `COMPUTED`. Evaluates all child draft payslips.
+    - `validate`: Allowed only from `COMPUTED`. Runs payroll audit checks.
+    - `mark-paid`: Allowed only from `VALIDATED`. Marks payrun and payslips as `PAID`.
+    - `cancel`: Allowed from `DRAFT`, `COMPUTED`, or `VALIDATED`. Cannot cancel a `PAID` payrun (`400 Bad Request`).
+    - `delete`: Allowed only when `DRAFT` or `CANCELLED`. Deleting a computed, validated, or paid payrun is blocked (`400 Bad Request`).
+
+25. **Operational Context Integration & Negative Net Salary Blocking Audit**:
+    - During calculation, real-time operational metrics are dynamically aggregated for each employee over the period:
+      - Attendance: `worked_days` (count of distinct days with attendance status in `PRESENT`, `LATE`, `HALF_DAY`, with half-day counting as 0.5) and total `overtime_minutes`.
+      - Approved Time Off: total approved leave days / hours per leave type.
+    - Calculation context maps these into formula symbols (`contract_wage`, `worked_days`, `overtime_minutes`, etc.).
+    - Validation audit check: If any computed payslip results in negative net pay (`net_amount < 0`) or if the employee's contract is no longer `RUNNING`, payrun validation is strictly blocked with `400 Bad Request`.
 
 
 

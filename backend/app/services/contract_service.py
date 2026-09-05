@@ -20,18 +20,20 @@ from app.models.contract import Contract, ContractStatus
 from app.models.department import Department
 from app.models.employee import Employee
 from app.models.job_position import JobPosition
+from app.models.salary_structure import SalaryStructure
 from app.schemas.contract import ContractCreate, ContractUpdate
 
 
 def _contract_query():
     """
     Base SELECT query with eager relationship loading.
-    Eagerly fetches Employee, Department, and JobPosition to prevent N+1 queries.
+    Eagerly fetches Employee, Department, JobPosition, and SalaryStructure to prevent N+1 queries.
     """
     return select(Contract).options(
         selectinload(Contract.employee),
         selectinload(Contract.department),
         selectinload(Contract.job_position),
+        selectinload(Contract.salary_structure),
     )
 
 
@@ -161,6 +163,23 @@ async def create_contract(db: AsyncSession, data: ContractCreate) -> Contract:
             detail=f"Cannot assign contract to inactive job position '{pos.name}'.",
         )
 
+    # 5b. Validate salary structure if specified
+    if data.salary_structure_id is not None:
+        struct_result = await db.execute(
+            select(SalaryStructure).where(SalaryStructure.id == data.salary_structure_id)
+        )
+        struct = struct_result.scalar_one_or_none()
+        if not struct:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Salary structure with ID {data.salary_structure_id} does not exist.",
+            )
+        if not struct.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot assign contract to inactive salary structure '{struct.code}'.",
+            )
+
     # 6. Check running contract date overlap if initial status is RUNNING
     if data.status == ContractStatus.RUNNING:
         await check_running_contract_overlap(
@@ -288,7 +307,23 @@ async def update_contract(
         contract.job_position_id = data.job_position_id
 
     if data.salary_structure_id is not None:
+        struct_result = await db.execute(
+            select(SalaryStructure).where(SalaryStructure.id == data.salary_structure_id)
+        )
+        struct = struct_result.scalar_one_or_none()
+        if not struct:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Salary structure with ID {data.salary_structure_id} does not exist.",
+            )
+        if not struct.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Cannot assign contract to inactive salary structure '{struct.code}'.",
+            )
         contract.salary_structure_id = data.salary_structure_id
+    elif "salary_structure_id" in data.model_fields_set and data.salary_structure_id is None:
+        contract.salary_structure_id = None
 
     if data.wage is not None:
         contract.wage = data.wage
@@ -390,3 +425,30 @@ async def get_employee_contracts(db: AsyncSession, employee_id: int) -> list[Con
         .order_by(Contract.start_date.desc())
     )
     return list(result.scalars().all())
+
+
+async def get_applicable_contract(
+    db: AsyncSession,
+    employee_id: int,
+    target_date: date,
+) -> Contract | None:
+    """
+    Look up the active RUNNING contract for an employee on a given calendar date.
+    Returns the contract with eager relationships loaded, or None if no running contract applies.
+    """
+    query = (
+        _contract_query()
+        .where(
+            Contract.employee_id == employee_id,
+            Contract.status == ContractStatus.RUNNING,
+            Contract.start_date <= target_date,
+            or_(
+                Contract.end_date.is_(None),
+                Contract.end_date >= target_date,
+            ),
+        )
+        .order_by(Contract.start_date.desc())
+    )
+    result = await db.execute(query)
+    return result.scalars().first()
+

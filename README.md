@@ -51,6 +51,8 @@ PeoplePay360/
 | [v0.0.3](backend/CHANGELOG.md) | Employment Contracts & Lifecycle Management |
 | [v0.0.4](backend/CHANGELOG.md) | Attendance Management & Working Schedules |
 | [v0.0.5](backend/CHANGELOG.md) | Time Off Management (Leave Types, Allocations, Requests, Balances) |
+| [v0.0.6](backend/CHANGELOG.md) | Salary Structures, Salary Rules & Calculation Engine |
+| [v0.0.7](backend/CHANGELOG.md) | Payruns, Payslips & Payroll Processing Engine |
 
 
 ## Getting Started

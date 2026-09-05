@@ -156,3 +156,30 @@ def require_admin() -> Callable:
     Restricts access strictly to system ADMIN accounts.
     """
     return require_role(UserRole.ADMIN)
+
+
+def require_payroll_read() -> Callable:
+    """
+    Allows read-only access to salary structures and rules:
+    - ADMIN
+    - HR_PAYROLL_MANAGER
+    - HR_PAYROLL_USER
+    """
+    return require_role(
+        UserRole.ADMIN,
+        UserRole.HR_PAYROLL_MANAGER,
+        UserRole.HR_PAYROLL_USER,
+    )
+
+
+def require_payroll_manager() -> Callable:
+    """
+    Allows full configuration access to salary structures and rules:
+    - ADMIN
+    - HR_PAYROLL_MANAGER
+    """
+    return require_role(
+        UserRole.ADMIN,
+        UserRole.HR_PAYROLL_MANAGER,
+    )
+

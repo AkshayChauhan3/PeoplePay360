@@ -6,7 +6,11 @@ from app.api import (
     employees,
     health,
     job_positions,
+    payruns,
+    payslips,
     roles,
+    salary_rules,
+    salary_structures,
     schedules,
     time_off,
 )
@@ -19,8 +23,13 @@ __all__ = [
     "employees",
     "health",
     "job_positions",
+    "payruns",
+    "payslips",
     "roles",
+    "salary_rules",
+    "salary_structures",
     "schedules",
     "time_off",
 ]
+
 

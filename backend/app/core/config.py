@@ -34,7 +34,7 @@ class Settings(BaseSettings):
 
     # Application
     app_env: str = "development"
-    app_version: str = "0.0.5"
+    app_version: str = "0.0.7"
 
     @property
     def cors_origins_list(self) -> list[str]:

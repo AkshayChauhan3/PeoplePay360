@@ -12,7 +12,11 @@ from app.api import (
     employees,
     health,
     job_positions,
+    payruns,
+    payslips,
     roles,
+    salary_rules,
+    salary_structures,
     schedules,
     time_off,
 )
@@ -41,7 +45,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="PeoplePay360 API",
-    description="HR & Payroll Backend — Phase 5: Time Off Management",
+    description="HR & Payroll Backend — Phase 7: Payruns & Payslips",
     version=settings.app_version,
     docs_url="/docs",
     redoc_url="/redoc",
@@ -76,8 +80,16 @@ app.include_router(employees.router, prefix=API_PREFIX)
 app.include_router(contracts.router, prefix=API_PREFIX)
 app.include_router(schedules.router, prefix=API_PREFIX)
 app.include_router(attendance.router, prefix=API_PREFIX)
+# Time Off endpoints (mounted under /time-off with backwards-compatible alias /timeoff)
 app.include_router(time_off.router, prefix=f"{API_PREFIX}/time-off")
 app.include_router(time_off.router, prefix=f"{API_PREFIX}/timeoff")
+# Phase 6: Salary Structures & Rules
+app.include_router(salary_structures.router, prefix=API_PREFIX)
+app.include_router(salary_rules.router, prefix=API_PREFIX)
+# Phase 7: Payruns & Payslips
+app.include_router(payruns.router, prefix=API_PREFIX)
+app.include_router(payslips.router, prefix=API_PREFIX)
+
 
 # ---------------------------------------------------------------------------
 # Global exception handlers

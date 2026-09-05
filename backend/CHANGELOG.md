@@ -7,6 +7,143 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.0.7] — 2026-09-05
+
+### Summary
+Phase 7 release — **Payruns, Payslips & Payroll Processing Engine**.
+Introduces end-to-end payroll lifecycle processing: Payrun batches (`Payrun`), Employee Payslips (`Payslip`), Itemized Evaluated Rule Snapshots (`PayslipLine`), two-step Payrun Creation Wizard (Pre-computation Eligibility Filter & Draft Batch Creation), multi-module Operational Context Integration (Attendance worked days / overtime and Approved Leave days / hours aggregation), Salary Calculation Engine execution with immutable line item recording, strict lifecycle state machines (`DRAFT` -> `COMPUTED` -> `VALIDATED` -> `PAID`), blocking audit validations (negative net salary and non-running contract detection), employee self-service payslip history, and comprehensive RBAC security.
+
+### Added
+
+#### Database Models (`app/models/`)
+- `payrun.py` — `PayrunStatus` enum (`DRAFT`, `COMPUTED`, `VALIDATED`, `PAID`, `CANCELLED`) and `Payrun` model (`name`, `salary_structure_id`, `period_start`, `period_end`, `status`, `total_gross`, `total_deduction`, `total_net`, `created_by_user_id`, timestamps) with 1:N relationship to `Payslip`.
+- `payslip.py` — `PayslipStatus` enum (`DRAFT`, `COMPUTED`, `VALIDATED`, `PAID`, `CANCELLED`) and `Payslip` model (`payrun_id`, `employee_id`, `contract_id`, `salary_structure_id`, `period_start`, `period_end`, `status`, `worked_days`, `gross_amount`, `deduction_amount`, `net_amount`, timestamps) with composite unique constraint `uq_payslips_employee_period (employee_id, period_start, period_end)` and 1:N relationship to `PayslipLine`.
+- `payslip_line.py` — `PayslipLine` historical snapshot model (`payslip_id`, `salary_rule_id`, `code`, `name`, `category`, `sequence`, `amount`, `created_at`).
+- `app/db/base.py` & `app/models/__init__.py` — Registered `payrun`, `payslip`, and `payslip_line`.
+
+#### Database Migrations (`alembic/versions/`)
+- `0007_create_payrun_and_payslip_tables.py` — Creates custom PostgreSQL enums `payrunstatus` and `payslipstatus`, creates tables `payruns`, `payslips`, and `payslip_lines`, adds foreign keys, composite unique constraint `uq_payslips_employee_period`, indexes, and full downgrade support.
+
+#### Pydantic Schemas (`app/schemas/`)
+- `payslip.py` — `PayslipLineResponse`, `PayslipResponse`, `PayslipListResponse`.
+- `payrun.py` — `PayrunPreviewRequest`, `EligibleEmployeeItem`, `IneligibleEmployeeItem`, `PayrollWarningItem`, `PayrunPreviewResponse`, `PayrunCreate`, `PayrollValidationResponse`, `PayrunResponse`, `PayrunListResponse`.
+- `app/schemas/__init__.py` — Exported all payrun and payslip schemas.
+
+#### Service Layer (`app/services/`)
+- `payroll_processing_service.py`:
+  - `check_employee_payroll_eligibility()` — Evaluates employee status (`ACTIVE`), running contract covering accounting period, assigned salary structure match, and duplicate payslip protection.
+  - `aggregate_employee_attendance()` — Computes exact `worked_days` (counting `PRESENT`, `LATE`, and 0.5 for `HALF_DAY`) and total `overtime_minutes` across the accounting date window.
+  - `aggregate_employee_time_off()` — Aggregates approved leave days and hours partitioned by leave type code.
+  - `preview_payroll_eligibility()` — Implements Wizard Step 1: gathers eligible/ineligible employees and computes preliminary warnings.
+  - `calculate_and_generate_payslip()` — Builds operational `CalculationContext`, executes `SalaryRuleEngine.calculate()`, computes totals (`gross`, `deduction`, `net`), persists `Payslip` and immutable `PayslipLine` snapshots.
+  - `audit_payrun_for_warnings()` — Implements validation auditing; blocks validation if negative net pay or non-running contracts exist.
+- `payrun_service.py`:
+  - `preview_payrun_wizard()` — Wizard Step 1 endpoint handler.
+  - `create_payrun()` — Wizard Step 2 endpoint handler creating `Payrun` in `DRAFT` and child draft `Payslip` records.
+  - `get_payrun_by_id()` & `list_payruns()` — Paginated list and nested detail retrieval with financial aggregates.
+  - `compute_payrun()` — Orchestrates calculation across all payslips; transitions `DRAFT` -> `COMPUTED`.
+  - `validate_payrun()` — Audits computed batch; transitions `COMPUTED` -> `VALIDATED`.
+  - `mark_payrun_paid()` — Transitions `VALIDATED` -> `PAID` and sets child payslips to `PAID`.
+  - `cancel_payrun()` — Cancels batch; transitions payrun and child payslips to `CANCELLED`.
+  - `delete_payrun()` — Deletes batch and draft payslips (allowed strictly in `DRAFT` or `CANCELLED`).
+- `payslip_service.py`:
+  - `get_payslip_by_id()` & `list_payslips()` — Filtered queries by employee, payrun, and status.
+  - `get_employee_payslips()` — Employee-specific payslip history retrieval.
+
+#### API Routers (`app/api/`)
+- `payruns.py` — Mounted at `/api/v1/payruns`:
+  - `POST /api/v1/payruns/preview` — Wizard Step 1: Preview payroll eligibility and warnings (`HR_PAYROLL_USER`, `HR_PAYROLL_MANAGER`, `ADMIN`).
+  - `POST /api/v1/payruns` — Wizard Step 2: Create draft payrun batch (`HR_PAYROLL_MANAGER`, `ADMIN`).
+  - `GET /api/v1/payruns` — List payruns with status filtering and pagination (`HR_PAYROLL_USER`, `HR_PAYROLL_MANAGER`, `ADMIN`).
+  - `GET /api/v1/payruns/{id}` — Get payrun details with nested payslips (`HR_PAYROLL_USER`, `HR_PAYROLL_MANAGER`, `ADMIN`).
+  - `POST /api/v1/payruns/{id}/compute` — Compute all payslips in payrun (`HR_PAYROLL_MANAGER`, `ADMIN`).
+  - `POST /api/v1/payruns/{id}/validate` — Audit and validate payrun (`HR_PAYROLL_MANAGER`, `ADMIN`).
+  - `POST /api/v1/payruns/{id}/mark-paid` — Finalize payrun as paid (`HR_PAYROLL_MANAGER`, `ADMIN`).
+  - `POST /api/v1/payruns/{id}/cancel` — Cancel payrun (`HR_PAYROLL_MANAGER`, `ADMIN`).
+  - `DELETE /api/v1/payruns/{id}` — Delete draft or cancelled payrun (`HR_PAYROLL_MANAGER`, `ADMIN`).
+  - `GET /api/v1/payruns/{id}/payslips` — List payslips within a payrun (`HR_PAYROLL_USER`, `HR_PAYROLL_MANAGER`, `ADMIN`).
+- `payslips.py` — Mounted at `/api/v1/payslips`:
+  - `GET /api/v1/payslips` — List all payslips across payruns (`HR_PAYROLL_USER`, `HR_PAYROLL_MANAGER`, `ADMIN`).
+  - `GET /api/v1/payslips/{id}` — Get payslip details & line item snapshots (`HR_PAYROLL_USER`, `HR_PAYROLL_MANAGER`, `ADMIN`, or owner `EMPLOYEE`).
+- `employees.py`:
+  - `GET /api/v1/employees/me/payslips` — Employee self-service payslip history (authenticated linked user).
+  - `GET /api/v1/employees/{employee_id}/payslips` — Employee payslips (payroll staff or owner employee).
+
+#### Automated Tests (`tests/test_payroll_processing.py`)
+- Comprehensive test suite covering:
+  - Wizard Step 1 preview eligibility, reason diagnostics, and warnings.
+  - Wizard Step 2 draft payrun batch creation.
+  - Standard remuneration calculation, operational context aggregation, and `PayslipLine` persistence.
+  - Historical immutability of `PayslipLine` snapshots upon upstream rule changes.
+  - Duplicate payslip prevention and database unique constraint enforcement.
+  - Lifecycle state machine transitions and invalid transition rejections.
+  - Blocking audit errors on negative net salary.
+  - Real-time attendance and approved leave data aggregation.
+  - Self-service endpoints and cross-employee unauthorized access protection.
+  - Complete RBAC security matrix verification.
+
+---
+
+## [0.0.6] — 2026-09-05
+
+### Summary
+Phase 6 release — **Salary Structures, Salary Rules & Calculation Engine**.
+Introduces comprehensive remuneration modeling: Salary Structures (`SalaryStructure`), Salary Rules (`SalaryRule`), rule categories (`BASIC`, `ALLOWANCE`, `GROSS`, `DEDUCTION`, `NET`), computation types (`FIXED`, `PERCENTAGE`, `FORMULA`), safe AST-based formula evaluator (no `eval`/`exec`), rule dependency ordering, circular dependency detection, single documented financial rounding policy (`ROUND_HALF_UP` to 2 decimal places), Contract-to-Structure foreign key integration, applicable contract date lookup, stateless preview calculation, and full RBAC matrix.
+
+### Added
+
+#### Database Models (`app/models/`)
+- `salary_structure.py` — `SalaryStructure` model (`name`, `code`, `description`, `is_active`, timestamps) with 1:N relationship to `SalaryRule` and `Contract`.
+- `salary_rule.py` — `SalaryRuleCategory` enum (`BASIC`, `ALLOWANCE`, `GROSS`, `DEDUCTION`, `NET`), `ComputationType` enum (`FIXED`, `PERCENTAGE`, `FORMULA`), and `SalaryRule` model (`salary_structure_id`, `name`, `code`, `category`, `sequence`, `computation_type`, `fixed_amount`, `percentage`, `percentage_base`, `formula`, `is_active`, timestamps) with unique constraints `(salary_structure_id, code)` and `(salary_structure_id, sequence)`.
+- `contract.py` — Converted `salary_structure_id` to foreign key referencing `salary_structures.id` with `ondelete="SET NULL"` and added `salary_structure` relationship.
+- `app/db/base.py` & `app/models/__init__.py` — Registered `salary_structure` and `salary_rule`.
+
+#### Database Migrations (`alembic/versions/`)
+- `0006_create_salary_structure_and_rule_tables.py` — Creates enums `salaryrulecategory` and `computationtype`, tables `salary_structures` and `salary_rules`, adds `fk_contracts_salary_structure_id` to `contracts`, and creates indexes and constraints.
+
+#### Pydantic Schemas (`app/schemas/`)
+- `salary_structure.py` — `SalaryStructureCreate`, `SalaryStructureUpdate`, `SalaryStructureResponse`, `SalaryStructureListResponse`, `SalaryPreviewRequest`, `SalaryRuleResultResponse`, `SalaryPreviewResponse`.
+- `salary_rule.py` — `SalaryRuleCreate`, `SalaryRuleUpdate`, `SalaryRuleResponse`, `SalaryRuleListResponse`.
+
+#### Service Layer (`app/services/`)
+- `salary_rule_engine.py`:
+  - AST-based restricted mathematical parser & evaluator (permitting arithmetic `+`, `-`, `*`, `/`, constants, identifiers, and grouping; forbidding `__import__`, `open`, `eval`, `exec`, attribute access).
+  - Financial precision: `Decimal` arithmetic with `ROUND_HALF_UP` to 2 decimal places (`Decimal("0.01")`).
+  - `CalculationContext` data abstraction (`contract_wage`, `worked_days`, `worked_minutes`, `overtime_minutes`, `approved_time_off`, `rule_results`).
+  - `SalaryRuleResult` output model.
+  - Cycle detection using DFS graph traversal and dependency sequence validation.
+  - `SalaryRuleEngine.calculate()` evaluating active rules in ascending sequence order.
+- `salary_structure_service.py` — CRUD operations, uppercase code normalization, active contract deactivation guard, rule retrieval, and stateless preview computation.
+- `salary_rule_service.py` — CRUD operations, configuration-time validation (computation type fields, unique code/sequence, dependency sequence ordering, cycle prevention), and dependency deletion guard.
+- `contract_service.py` — Added `get_applicable_contract()` date lookup and `salary_structure_id` validation.
+
+#### Dependencies & RBAC (`app/dependencies/auth.py`)
+- Added `require_payroll_read()` (`ADMIN`, `HR_PAYROLL_MANAGER`, `HR_PAYROLL_USER`).
+- Added `require_payroll_manager()` (`ADMIN`, `HR_PAYROLL_MANAGER`).
+- `EMPLOYEE` and `HR_MANAGER` are forbidden from salary structure and rule configuration.
+
+#### API Routers (`app/api/`)
+- `salary_structures.py` — Mounted at `/api/v1/salary-structures`:
+  - `POST /api/v1/salary-structures` — Create salary structure (HR_PAYROLL_MANAGER, ADMIN).
+  - `GET /api/v1/salary-structures` — List salary structures (HR_PAYROLL_USER, HR_PAYROLL_MANAGER, ADMIN).
+  - `GET /api/v1/salary-structures/{id}` — Get structure details.
+  - `PATCH /api/v1/salary-structures/{id}` — Update structure (HR_PAYROLL_MANAGER, ADMIN).
+  - `DELETE /api/v1/salary-structures/{id}` — Soft-deactivate structure (HR_PAYROLL_MANAGER, ADMIN).
+  - `GET /api/v1/salary-structures/{id}/rules` — List structure rules ordered by sequence.
+  - `POST /api/v1/salary-structures/{id}/preview` — Stateless calculation preview.
+- `salary_rules.py` — Mounted at `/api/v1/salary-rules`:
+  - `POST /api/v1/salary-rules` — Create salary rule (HR_PAYROLL_MANAGER, ADMIN).
+  - `GET /api/v1/salary-rules` — List rules with filters.
+  - `GET /api/v1/salary-rules/{id}` — Get rule details.
+  - `PATCH /api/v1/salary-rules/{id}` — Update rule (HR_PAYROLL_MANAGER, ADMIN).
+  - `DELETE /api/v1/salary-rules/{id}` — Delete rule (HR_PAYROLL_MANAGER, ADMIN).
+
+#### Tests (`tests/`)
+- `test_salary_structures.py` — 24 comprehensive unit and integration tests covering structure CRUD, rule validations (FIXED, PERCENTAGE, FORMULA), dependency ordering, circular dependency rejection, AST security sandbox, standard calculation scenario (BASIC, HRA, TRANSPORT, GROSS, PF, NET), sequence execution resilience, decimal rounding (`ROUND_HALF_UP`), contract date integration, preview safety, and RBAC matrix.
+- Total test suite now stands at 155 tests passing across Phases 1 through 6.
+
+---
+
 ## [0.0.5] — 2026-09-05
 
 ### Summary
