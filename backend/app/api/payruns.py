@@ -20,7 +20,11 @@ from app.dependencies.auth import (
 )
 from app.models.payrun import PayrunStatus
 from app.models.payslip import PayslipStatus
-from app.models.user import User
+from app.schemas.email_delivery import (
+    EmailDeliverySummaryResponse,
+    SendPayslipsRequest,
+    SendPayslipsResponse,
+)
 from app.schemas.payout import BankPayoutSummaryResponse
 from app.schemas.payrun import (
     PayrunCreate,
@@ -30,9 +34,15 @@ from app.schemas.payrun import (
     PayrunResponse,
 )
 from app.schemas.payslip import PayslipListResponse
-from app.services import payout_export_service, payrun_service, payslip_service
+from app.services import (
+    email_delivery_service,
+    payout_export_service,
+    payrun_service,
+    payslip_service,
+)
 
 router = APIRouter(prefix="/payruns", tags=["Payruns"])
+
 
 
 @router.post(
@@ -296,5 +306,69 @@ async def export_payrun_bank_file(
             "Access-Control-Expose-Headers": "Content-Disposition",
         },
     )
+
+
+@router.post(
+    "/{payrun_id}/send-payslips",
+    response_model=SendPayslipsResponse,
+    summary="Distribute PDF payslips via email to employees",
+)
+async def send_payrun_payslips(
+    payrun_id: int,
+    payload: SendPayslipsRequest = SendPayslipsRequest(),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_payroll_manager()),
+):
+    """
+    Distributes individual ReportLab PDF payslips via email to all employees in the payrun batch.
+    Requires payrun to be in VALIDATED or PAID state.
+    Automatically skips employees who already have status SENT unless force_resend_all is True.
+    """
+    return await email_delivery_service.deliver_payrun_payslips(
+        db=db,
+        payrun_id=payrun_id,
+        retry_failed_only=False,
+        force_resend_all=payload.force_resend_all,
+    )
+
+
+@router.post(
+    "/{payrun_id}/retry-failed-emails",
+    response_model=SendPayslipsResponse,
+    summary="Retry failed payslip email deliveries",
+)
+async def retry_failed_payrun_emails(
+    payrun_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_payroll_manager()),
+):
+    """
+    HR 'Retry Failed' Action: Re-attempts email delivery strictly for employees whose
+    previous delivery status is FAILED. Skips already delivered recipients without double-spamming.
+    """
+    return await email_delivery_service.deliver_payrun_payslips(
+        db=db,
+        payrun_id=payrun_id,
+        retry_failed_only=True,
+        force_resend_all=False,
+    )
+
+
+@router.get(
+    "/{payrun_id}/email-delivery-summary",
+    response_model=EmailDeliverySummaryResponse,
+    summary="Audit payrun email distribution metrics and logs",
+)
+async def get_payrun_email_delivery_summary(
+    payrun_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_payroll_read()),
+):
+    """
+    Returns real-time email delivery metrics (Total, Sent, Failed, Pending) and an itemized
+    delivery audit log for each employee payslip in the payrun batch.
+    """
+    return await email_delivery_service.get_payrun_email_delivery_summary(db, payrun_id)
+
 
 

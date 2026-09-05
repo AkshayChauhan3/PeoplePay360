@@ -3,7 +3,9 @@ from app.services import (
     auth_service,
     contract_service,
     department_service,
+    email_delivery_service,
     employee_service,
+
     job_position_service,
     payroll_processing_service,
     payout_export_service,
@@ -26,7 +28,9 @@ __all__ = [
     "auth_service",
     "contract_service",
     "department_service",
+    "email_delivery_service",
     "employee_service",
+
     "job_position_service",
     "payroll_processing_service",
     "payout_export_service",

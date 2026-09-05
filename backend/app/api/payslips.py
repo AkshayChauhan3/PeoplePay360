@@ -10,11 +10,17 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
-from app.dependencies.auth import get_current_user, require_payroll_read
+from app.dependencies.auth import (
+    get_current_user,
+    require_payroll_manager,
+    require_payroll_read,
+)
 from app.models.payslip import PayslipStatus
 from app.models.user import User, UserRole
+from app.schemas.email_delivery import SinglePayslipEmailResponse
 from app.schemas.payslip import PayslipListResponse, PayslipResponse
-from app.services import payslip_service, pdf_service
+from app.services import email_delivery_service, payslip_service, pdf_service
+
 
 router = APIRouter(prefix="/payslips", tags=["Payslips"])
 
@@ -139,4 +145,23 @@ async def download_payslip_pdf(
             "Content-Disposition": f'inline; filename="{filename}"',
         },
     )
+
+
+@router.post(
+    "/{payslip_id}/send-email",
+    response_model=SinglePayslipEmailResponse,
+    summary="Email individual payslip to employee",
+)
+async def send_individual_payslip_email(
+    payslip_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_payroll_manager()),
+):
+    """
+    Generates and emails an individual employee's ReportLab PDF payslip.
+    Restricted to HR Payroll Managers and Administrators.
+    Requires the associated payrun to be in VALIDATED or PAID state.
+    """
+    return await email_delivery_service.send_single_payslip_email(db, payslip_id)
+
 

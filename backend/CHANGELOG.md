@@ -7,7 +7,45 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.0.9] — 2026-09-06
+
+### Summary
+Post-Phase 7 Module 2 — **Automated Email Delivery Engine**.
+Enables automated, reliable distribution of individual salary statements to employees via email. Features ReportLab PDF payslip generation and attachment, professional responsive HTML email bodies with compensation summaries in INR, threaded non-blocking SMTP transport with zero-credential Mock Delivery Mode for local development/testing, persistent delivery audit logging (`payslip_email_deliveries`), and an HR "Retry Failed" workflow that safely re-transmits only to failed recipients without double-spamming.
+
+### Added
+
+#### Database Models & Migrations
+- `alembic/versions/0009_create_payslip_email_deliveries_table.py` — Creates `emaildeliverystatus` Postgres enum (`PENDING`, `SENT`, `FAILED`) and `payslip_email_deliveries` table with cascading foreign keys to `payruns`, `payslips`, and `employees`.
+- `app/models/email_delivery.py` — Created `PayslipEmailDelivery` ORM entity and `EmailDeliveryStatus` enum.
+- `app/models/__init__.py` — Exported `PayslipEmailDelivery` and `EmailDeliveryStatus`.
+
+#### Schemas (`app/schemas/`)
+- `schemas/email_delivery.py` — Created `PayslipEmailDeliveryItem`, `EmailDeliverySummaryResponse`, `SendPayslipsRequest`, `SendPayslipsResponse`, and `SinglePayslipEmailResponse`.
+- `schemas/__init__.py` — Exported new email delivery schemas.
+
+#### Service Layer (`app/services/`)
+- `services/email_delivery_service.py`:
+  - `build_payslip_email_content()` — Builds clean plain-text and responsive HTML email templates containing company header, net take-home salary highlight card, earnings/deductions summary table, and confidentiality footer.
+  - `compose_payslip_mime_message()` — Packages HTML body, plain text alternative, and ReportLab PDF payslip attachment into a standards-compliant MIME multipart message.
+  - `_send_smtp_sync()` — Non-blocking SMTP transport supporting live TLS/STARTTLS and zero-configuration Mock Mode with simulated delivery rejections for testing.
+  - `deliver_payrun_payslips()` — Batch distributes PDF payslips to all employees in a payrun with state guardrails (`VALIDATED` or `PAID`), anti-spam idempotency (skips already `SENT`), and `retry_failed_only` targeting.
+  - `send_single_payslip_email()` — Sends or re-sends an individual employee's PDF payslip email.
+  - `get_payrun_email_delivery_summary()` — Audits delivery metrics (`total`, `sent`, `failed`, `pending`, `not_attempted`, `can_retry`) and itemized employee logs.
+
+#### API Endpoints (`app/api/`)
+- `POST /api/v1/payruns/{id}/send-payslips` — Distribute PDF payslips via email to all batch employees (RBAC: `require_payroll_manager`).
+- `POST /api/v1/payruns/{id}/retry-failed-emails` — Re-attempts delivery strictly for failed recipients (RBAC: `require_payroll_manager`).
+- `GET /api/v1/payruns/{id}/email-delivery-summary` — Real-time delivery audit metrics and logs (RBAC: `require_payroll_read`).
+- `POST /api/v1/payslips/{id}/send-email` — Re-send an individual employee's payslip email (RBAC: `require_payroll_manager`).
+
+#### Automated Test Suite
+- `tests/test_email_delivery.py` — 7 comprehensive tests covering state guardrails, delivery on VALIDATED/PAID, anti-spam idempotency, audit summary metrics, failure handling & retry-failed action, single payslip resend, and RBAC segregation of duties.
+
+---
+
 ## [0.0.8] — 2026-09-06
+
 
 ### Summary
 Post-Phase 7 Module 1 — **Employee Banking Details & Bank Payout File Export Engine**.

@@ -49,16 +49,31 @@ _TestSessionLocal = async_sessionmaker(
 @pytest_asyncio.fixture(scope="session", autouse=True)
 async def create_tables() -> AsyncGenerator[None, None]:
     """Create all tables and seed standard roles at the start of the session."""
+    from sqlalchemy import text
     async with _test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Clean any remnant rows from prior manual runs to ensure clean test isolation
+        for t in [
+            "payslip_email_deliveries", "payslip_lines", "payslips", "payruns",
+            "contracts", "time_off_requests", "time_off_allocations",
+            "time_off_types", "attendances", "working_schedule_days",
+            "working_schedules", "users", "employees", "job_positions",
+            "departments", "salary_rules", "salary_structures",
+        ]:
+            await conn.execute(text(f"TRUNCATE TABLE {t} CASCADE;"))
 
-    # Seed the 5 system roles so all tests can reference them
+    # Seed the standard roles, default schedule, and default time-off types so all tests can reference them
     async with _TestSessionLocal() as session:
         from app.services.role_service import seed_default_roles
+        from app.services.schedule_service import seed_default_schedule
+        from app.services.time_off_type_service import seed_default_time_off_types
         await seed_default_roles(session)
+        await seed_default_schedule(session)
+        await seed_default_time_off_types(session)
         await session.commit()
 
     yield
+
 
     await _test_engine.dispose()
 
@@ -200,26 +215,40 @@ async def employee_auth_headers(async_client: AsyncClient) -> dict[str, str]:
 
 @pytest_asyncio.fixture
 async def sample_department(async_client: AsyncClient, hr_manager_auth_headers: dict[str, str]) -> dict[str, Any]:
-    """Create a sample department and return its JSON response."""
+    """Create a sample department and return its JSON response (or existing if already present)."""
     res = await async_client.post(
         "/api/v1/departments",
         json={"name": "Engineering", "code": "ENG", "description": "Software Engineering"},
         headers=hr_manager_auth_headers,
     )
+    if res.status_code == 201:
+        return res.json()
+    if res.status_code == 409:
+        fetch = await async_client.get("/api/v1/departments", headers=hr_manager_auth_headers)
+        data = fetch.json()
+        return data[0] if isinstance(data, list) else data["items"][0]
     assert res.status_code == 201
     return res.json()
 
 
 @pytest_asyncio.fixture
 async def sample_job_position(async_client: AsyncClient, hr_manager_auth_headers: dict[str, str]) -> dict[str, Any]:
-    """Create a sample job position and return its JSON response."""
+    """Create a sample job position and return its JSON response (or existing if already present)."""
     res = await async_client.post(
         "/api/v1/job-positions",
         json={"name": "Software Engineer", "code": "SWE", "description": "Backend Engineer"},
         headers=hr_manager_auth_headers,
     )
+    if res.status_code == 201:
+        return res.json()
+    if res.status_code == 409:
+        fetch = await async_client.get("/api/v1/job-positions", headers=hr_manager_auth_headers)
+        data = fetch.json()
+        return data[0] if isinstance(data, list) else data["items"][0]
     assert res.status_code == 201
     return res.json()
+
+
 
 
 @pytest_asyncio.fixture

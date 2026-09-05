@@ -32,12 +32,29 @@ class Settings(BaseSettings):
     # CORS — comma-separated origins, e.g. "http://localhost:3000,https://app.example.com"
     cors_origins: str = "http://localhost:3000"
 
+    # SMTP / Email Delivery
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from_email: str = "payroll@peoplepay360.com"
+    smtp_from_name: str = "PeoplePay360 Payroll"
+    smtp_use_tls: bool = True
+    smtp_mock_delivery: bool = True
+    company_name: str = "PeoplePay360 Technologies Pvt Ltd"
+
     # Application
     app_env: str = "development"
-    app_version: str = "0.0.8"
+    app_version: str = "0.0.9"
+
+    @property
+    def is_smtp_configured(self) -> bool:
+        """Returns True if live SMTP host is specified and mock delivery is disabled."""
+        return bool(self.smtp_host.strip()) and not self.smtp_mock_delivery
 
     @property
     def cors_origins_list(self) -> list[str]:
+
         """Parse CORS_ORIGINS string into a list."""
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
 

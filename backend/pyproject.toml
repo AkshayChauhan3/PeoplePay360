@@ -1,8 +1,9 @@
 [project]
 name = "peoplepay360"
-version = "0.0.8"
-description = "PeoplePay360 — HR & Payroll Backend (v0.0.8: Bank Details & Payout Export)"
+version = "0.0.9"
+description = "PeoplePay360 — HR & Payroll Backend (v0.0.9: Automated Email Delivery Engine)"
 authors = [{ name = "PeoplePay360 Team" }]
+
 requires-python = ">=3.12"
 
 dependencies = [

@@ -15,6 +15,14 @@ from app.schemas.contract import (
     ContractUpdate,
 )
 from app.schemas.department import DepartmentCreate, DepartmentResponse, DepartmentUpdate
+from app.schemas.email_delivery import (
+    EmailDeliveryStatus,
+    EmailDeliverySummaryResponse,
+    PayslipEmailDeliveryItem,
+    SendPayslipsRequest,
+    SendPayslipsResponse,
+    SinglePayslipEmailResponse,
+)
 from app.schemas.employee import (
     EmployeeCreate,
     EmployeeListResponse,
@@ -23,6 +31,7 @@ from app.schemas.employee import (
     EmployeeUpdate,
     LinkUserRequest,
 )
+
 from app.schemas.job_position import (
     JobPositionCreate,
     JobPositionResponse,
@@ -102,6 +111,8 @@ __all__ = [
     "DepartmentCreate",
     "DepartmentResponse",
     "DepartmentUpdate",
+    "EmailDeliveryStatus",
+    "EmailDeliverySummaryResponse",
     "EmployeeCreate",
     "EmployeeListResponse",
     "EmployeeResponse",
@@ -120,7 +131,9 @@ __all__ = [
     "PayrunPreviewRequest",
     "PayrunPreviewResponse",
     "PayrunResponse",
+    "PayslipEmailDeliveryItem",
     "PayslipLineResponse",
+
     "PayslipListResponse",
     "PayslipResponse",
     "RefreshRequest",
@@ -142,7 +155,11 @@ __all__ = [
     "ScheduleLineIn",
     "ScheduleLineOut",
     "ScheduleOut",
+    "SendPayslipsRequest",
+    "SendPayslipsResponse",
+    "SinglePayslipEmailResponse",
     "TimeOffAllocationCreate",
+
     "TimeOffAllocationResponse",
     "TimeOffAllocationUpdate",
     "TimeOffBalanceItem",

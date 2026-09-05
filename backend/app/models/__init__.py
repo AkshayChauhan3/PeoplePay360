@@ -1,6 +1,7 @@
 from app.models.attendance import Attendance, AttendanceStatus
 from app.models.contract import Contract, ContractStatus
 from app.models.department import Department
+from app.models.email_delivery import EmailDeliveryStatus, PayslipEmailDelivery
 from app.models.employee import Employee, EmployeeStatus
 from app.models.job_position import JobPosition
 from app.models.payrun import Payrun, PayrunStatus
@@ -28,12 +29,14 @@ __all__ = [
     "Contract",
     "ContractStatus",
     "Department",
+    "EmailDeliveryStatus",
     "Employee",
     "EmployeeStatus",
     "JobPosition",
     "Payrun",
     "PayrunStatus",
     "Payslip",
+    "PayslipEmailDelivery",
     "PayslipLine",
     "PayslipStatus",
     "Role",
@@ -50,5 +53,6 @@ __all__ = [
     "WorkingSchedule",
     "WorkingScheduleDay",
 ]
+
 
 

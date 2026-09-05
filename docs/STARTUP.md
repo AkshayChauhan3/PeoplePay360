@@ -210,19 +210,29 @@ INFO  [alembic.runtime.migration] Running upgrade 0002 -> 0003, create contracts
 ```bash
 alembic current
 ```
-Output should show: `0003 (head)`.
+Output should show: `0009 (head)`.
 
-### 5.3 Default Role Seeding
+### 5.3 Seeding Complete Enterprise Data (400 Employees, Hierarchy, Contracts & Bank Details)
 
-You do **not** need to manually seed roles. The FastAPI application lifespan (`app/main.py`) automatically checks and seeds the 5 default system roles on startup:
+To populate a complete, production-grade 400-employee company dataset with 5-tier reporting hierarchy, Indian banking information, active contracts, 4 salary structures, 2026 leave allocations, and a computed live Payrun:
 
-| ID | Role Name | Description |
-|---|---|---|
-| `1` | `EMPLOYEE` | Standard employee with self-service access |
-| `2` | `HR_MANAGER` | Human Resources Manager with employee and master data management |
-| `3` | `HR_PAYROLL_USER` | HR Payroll Specialist with employee and payroll operations access |
-| `4` | `HR_PAYROLL_MANAGER` | HR Payroll Manager with full HR and payroll operations access |
-| `5` | `ADMIN` | System Administrator with full unrestricted access |
+```bash
+cd backend
+source .venv/bin/activate
+
+# Clean prior demo rows and seed 400 employees with September 2026 Payrun:
+python seed_data.py --reset
+
+# Or run idempotently without wiping existing data:
+python seed_data.py
+```
+
+#### Pre-Configured Test Accounts:
+- **System Admin**: `admin@peoplepay360.com` / `Admin@123`
+- **HR Director (CHRO)**: `chro@peoplepay360.com` / `Hr@123456`
+- **HR Manager**: `hr.manager@peoplepay360.com` / `Hr@123456`
+- **Payroll Specialist**: `payroll@peoplepay360.com` / `Payroll@123`
+- **All 400 Employees (`EMP0001` - `EMP0400`)**: `Employee@123`
 
 ---
 

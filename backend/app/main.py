@@ -22,7 +22,7 @@ from app.api import (
 )
 from app.core.config import settings
 from app.db.database import AsyncSessionLocal
-from app.services import role_service, schedule_service
+from app.services import role_service, schedule_service, time_off_type_service
 
 # ---------------------------------------------------------------------------
 # Application lifespan (startup / shutdown)
@@ -31,10 +31,11 @@ from app.services import role_service, schedule_service
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Lifecycle manager: seed initial system roles & default working schedule on startup."""
+    """Lifecycle manager: seed initial system roles, default working schedule, & time off types on startup."""
     async with AsyncSessionLocal() as session:
         await role_service.seed_default_roles(session)
         await schedule_service.seed_default_schedule(session)
+        await time_off_type_service.seed_default_time_off_types(session)
         await session.commit()
     yield
 

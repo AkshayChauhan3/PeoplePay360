@@ -166,3 +166,52 @@ async def deactivate_type(db: AsyncSession, type_id: int) -> TimeOffType:
     await db.refresh(leave_type)
     return leave_type
 
+
+async def seed_default_time_off_types(db: AsyncSession) -> list[TimeOffType]:
+    """Idempotently seed the standard default leave types (PTO, SICK, UNPAID)."""
+    default_types = [
+        {
+            "name": "Paid Time Off",
+            "code": "PTO",
+            "description": "Standard annual paid vacation entitlement",
+            "unit": "DAYS",
+            "requires_allocation": True,
+            "approval_required": True,
+            "payroll_integration": True,
+            "is_active": True,
+        },
+        {
+            "name": "Sick Leave",
+            "code": "SICK",
+            "description": "Paid sick leave allowance",
+            "unit": "DAYS",
+            "requires_allocation": True,
+            "approval_required": True,
+            "payroll_integration": True,
+            "is_active": True,
+        },
+        {
+            "name": "Unpaid Leave",
+            "code": "UNPAID",
+            "description": "Approved leave without pay; no allocation required",
+            "unit": "DAYS",
+            "requires_allocation": False,
+            "approval_required": True,
+            "payroll_integration": True,
+            "is_active": True,
+        },
+    ]
+
+    seeded: list[TimeOffType] = []
+    for type_data in default_types:
+        existing = await get_type_by_code(db, type_data["code"])
+        if existing is None:
+            t = TimeOffType(**type_data)
+            db.add(t)
+            seeded.append(t)
+        else:
+            seeded.append(existing)
+
+    await db.flush()
+    return seeded
+
