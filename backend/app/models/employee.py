@@ -22,6 +22,18 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+class EmployeeStatus(str, enum.Enum):
+    """
+    Operational status of an employee in the system.
+    """
+
+    ACTIVE = "ACTIVE"
+    ON_LEAVE = "ON_LEAVE"
+    TERMINATED = "TERMINATED"
+    PROBATION = "PROBATION"
+    SUSPENDED = "SUSPENDED"
+
+
 class EmployeeType(str, enum.Enum):
     """
     Supported employee classifications for filtering and payroll grouping.
@@ -115,6 +127,13 @@ class Employee(Base):
         nullable=False,
         default=EmployeeType.FULL_TIME,
         server_default=text("'FULL_TIME'"),
+    )
+
+    status: Mapped[EmployeeStatus] = mapped_column(
+        Enum(EmployeeStatus, name="employee_status", create_type=True),
+        nullable=False,
+        default=EmployeeStatus.ACTIVE,
+        server_default=text("'ACTIVE'"),
     )
 
     manager_id: Mapped[uuid.UUID | None] = mapped_column(
