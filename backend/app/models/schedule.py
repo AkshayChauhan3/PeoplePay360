@@ -190,3 +190,8 @@ class ScheduleLine(Base):
             f"<ScheduleLine id={self.id} day={self.day_of_week} "
             f"{self.start_time}-{self.end_time} work_hours={self.work_hours}>"
         )
+
+
+# Backward compatibility aliases
+WorkingSchedule = Schedule
+WorkingScheduleDay = ScheduleLine
