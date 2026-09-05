@@ -23,10 +23,13 @@ const breadcrumbs = {
   settings: 'System › Settings',
 };
 
-const MainLayout = ({ currentView, onNavigate, onLogout, children }) => {
+const MainLayout = ({ currentView, onNavigate, currentUser, onLogout, onSwitchRole, children }) => {
+  const displayName = currentUser?.full_name || (currentUser?.email ? currentUser.email.split('@')[0] : 'Admin User');
+  const roleName = currentUser?.role ? currentUser.role.replace(/_/g, ' ') : 'Administrator';
+
   return (
     <div className="dashboard-wrapper">
-      <Sidebar currentView={currentView} onNavigate={onNavigate} />
+      <Sidebar currentView={currentView} onNavigate={onNavigate} currentUser={currentUser} />
 
       <main className="main-content">
         <header className="global-header">
@@ -47,6 +50,24 @@ const MainLayout = ({ currentView, onNavigate, onLogout, children }) => {
           </div>
 
           <div className="header-actions">
+            {/* Live RBAC Persona / Role Switcher for Hackathon Evaluation */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'var(--surface-structural, #f7fafa)', padding: '3px 8px', borderRadius: '6px', border: '1px solid var(--border-structural)' }}>
+              <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>RBAC:</span>
+              <select 
+                className="control-select" 
+                value={currentUser?.role || 'ADMIN'}
+                onChange={(e) => onSwitchRole && onSwitchRole(e.target.value)}
+                style={{ fontSize: '11px', fontWeight: 700, border: 'none', background: 'transparent', cursor: 'pointer', padding: '2px 4px' }}
+                title="Switch Active Persona / Role"
+              >
+                <option value="ADMIN">👑 Admin (Full Access)</option>
+                <option value="HR_MANAGER">👥 HR Manager</option>
+                <option value="HR_PAYROLL_MANAGER">💳 Payroll Manager</option>
+                <option value="HR_PAYROLL_USER">📋 Payroll Specialist</option>
+                <option value="EMPLOYEE">👤 Employee (Self-Service)</option>
+              </select>
+            </div>
+
             <div className="entity-switcher">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect width="16" height="16" x="4" y="4" rx="2"/><path d="M4 12h16"/><path d="M12 4v16"/></svg>
               Acme Corp Global
@@ -62,24 +83,25 @@ const MainLayout = ({ currentView, onNavigate, onLogout, children }) => {
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" x2="12.01" y1="17" y2="17"/></svg>
             </div>
 
-            <div className="user-profile">
+            <div className="user-profile" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <div className="user-info text-right">
-                <span className="user-name">Elena Vance</span>
-                <span className="user-role">Chief People Officer</span>
+                <span className="user-name" style={{ textTransform: 'capitalize' }}>{displayName}</span>
+                <span className="user-role" style={{ textTransform: 'uppercase', fontSize: '10px', letterSpacing: '0.05em' }}>{roleName}</span>
               </div>
-              <div className="avatar">
-                <img src="https://i.pravatar.cc/150?u=a042581f4e29026024d" alt="Elena Vance" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+              <div className="avatar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--color-primary, #6366f1)', color: '#fff', fontWeight: 600, fontSize: '13px' }}>
+                {displayName.slice(0, 2).toUpperCase()}
               </div>
               {onLogout && (
-                <button
-                  title="Sign out"
-                  onClick={onLogout}
-                  style={{ background: 'none', border: '1px solid var(--border-structural)', borderRadius: '6px', padding: '0.35rem 0.5rem', cursor: 'pointer', color: 'var(--text-secondary)', marginLeft: '0.5rem', display: 'flex', alignItems: 'center' }}
+                <button 
+                  onClick={onLogout} 
+                  className="icon-btn" 
+                  title="Sign Out"
+                  style={{ marginLeft: '4px', cursor: 'pointer', border: 'none', background: 'transparent', color: 'var(--text-secondary)' }}
                 >
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-                    <polyline points="16 17 21 12 16 7"/>
-                    <line x1="21" y1="12" x2="9" y2="12"/>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                    <polyline points="16 17 21 12 16 7" />
+                    <line x1="21" y1="12" x2="9" y2="12" />
                   </svg>
                 </button>
               )}

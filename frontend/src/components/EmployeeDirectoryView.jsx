@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { apiService } from '../services/apiService';
 
-const mockEmployees = [
+const fallbackEmployees = [
   { id: 'PP-1042', name: 'Ananya Sharma', email: 'a.sharma@peoplepay360.internal', initials: 'AS', dept: 'Engineering', position: 'Lead Staff Architect', lead: 'Elena Vance', location: 'Bengaluru Hub', avatar: 'https://i.pravatar.cc/150?u=1' },
   { id: 'PP-1089', name: 'Marcus Brody', email: 'm.brody@peoplepay360.internal', initials: 'MB', dept: 'Product & UX', position: 'Senior UX Designer', lead: 'Ananya Sharma', location: 'London Office', avatar: null, bg: 'var(--surface-purple-tint)', color: 'var(--primary)' },
   { id: 'PP-0914', name: 'Elena Vance', email: 'e.vance@peoplepay360.internal', initials: 'EV', dept: 'People Ops', position: 'Chief People Officer', lead: 'Board of Directors', location: 'Mumbai HQ', avatar: 'https://i.pravatar.cc/150?u=a042581f4e29026024d' },
@@ -10,7 +11,69 @@ const mockEmployees = [
   { id: 'PP-1205', name: 'Aisha Al-Mansoor', email: 'a.mansoor@peoplepay360.internal', initials: 'AA', dept: 'People Ops', position: 'Payroll Specialist', lead: 'Elena Vance', location: 'Dubai Hub', avatar: null, bg: 'var(--surface-purple-tint)', color: 'var(--primary)' },
 ];
 
+const normalizeEmployee = (emp, idx) => ({
+  id: emp.employee_id || emp.id || `PP-${1000 + idx}`,
+  name: emp.name || `${emp.first_name || ''} ${emp.last_name || ''}`.trim() || 'Employee',
+  email: emp.work_email || emp.email || 'emp@peoplepay360.internal',
+  initials: emp.initials || (emp.name ? emp.name.split(' ').map(n=>n[0]).join('') : `${emp.first_name?.[0] || ''}${emp.last_name?.[0] || ''}` || 'EM'),
+  dept: emp.department?.name || emp.department || emp.dept || 'Engineering',
+  position: emp.job_title || emp.job_position || emp.position || 'Staff',
+  lead: emp.manager_name || emp.manager || emp.lead || 'Elena Vance',
+  location: emp.work_location || emp.location || 'Mumbai HQ',
+  avatar: emp.avatar || null,
+  bg: emp.bg || 'var(--surface-purple-tint)',
+  color: emp.color || 'var(--primary)',
+});
+
 const EmployeeDirectoryView = ({ onNavigate }) => {
+  const [employees, setEmployees] = useState(fallbackEmployees);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [deptFilter, setDeptFilter] = useState('All');
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newEmp, setNewEmp] = useState({ name: '', email: '', dept: 'Engineering', position: '', location: 'Mumbai HQ' });
+
+  useEffect(() => {
+    const fetchEmployees = async () => {
+      try {
+        const data = await apiService.getEmployees();
+        if (Array.isArray(data) && data.length > 0) {
+          setEmployees(data.map(normalizeEmployee));
+        }
+      } catch (err) {
+        console.warn('Using fallback employees:', err);
+      }
+    };
+    fetchEmployees();
+  }, []);
+
+  const handleAddEmployee = async (e) => {
+    e.preventDefault();
+    try {
+      const created = await apiService.createEmployee({
+        first_name: newEmp.name.split(' ')[0] || newEmp.name,
+        last_name: newEmp.name.split(' ').slice(1).join(' ') || '',
+        work_email: newEmp.email,
+        department: newEmp.dept,
+        job_position: newEmp.position,
+        location: newEmp.location,
+      });
+      setEmployees(prev => [normalizeEmployee(created, prev.length + 1), ...prev]);
+      setShowAddModal(false);
+      setNewEmp({ name: '', email: '', dept: 'Engineering', position: '', location: 'Mumbai HQ' });
+    } catch (err) {
+      console.error('Failed to create employee:', err);
+    }
+  };
+
+  const filteredEmployees = employees.filter(emp => {
+    const matchesSearch = 
+      emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      emp.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      emp.email.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesDept = deptFilter === 'All' || emp.dept === deptFilter;
+    return matchesSearch && matchesDept;
+  });
+
   return (
     <>
       <div className="dashboard-header-strip">
@@ -24,7 +87,7 @@ const EmployeeDirectoryView = ({ onNavigate }) => {
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
             Export CSV / Excel
           </button>
-          <button className="btn-primary">
+          <button className="btn-primary" onClick={() => setShowAddModal(true)}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
             Add Employee
           </button>
@@ -35,12 +98,12 @@ const EmployeeDirectoryView = ({ onNavigate }) => {
         <div className="kpi-card relative">
           <div className="kpi-title">TOTAL WORKFORCE</div>
           <div className="kpi-value-row">
-            <span className="kpi-value tabular-nums">248</span>
+            <span className="kpi-value tabular-nums">{employees.length}</span>
             <span className="text-sm ml-1 text-muted">Headcount</span>
           </div>
           <div className="kpi-subtext mt-3 flex items-center gap-2">
-            <span className="status-pill structural">236 Full-time</span>
-            <span className="status-pill active">12 Contractors</span>
+            <span className="status-pill structural">{employees.length} Full-time</span>
+            <span className="status-pill active">0 Contractors</span>
           </div>
           <div className="absolute top-4 right-4 p-2 rounded-full" style={{ background: 'var(--surface-structural)' }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'var(--text-secondary)' }}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
@@ -95,18 +158,27 @@ const EmployeeDirectoryView = ({ onNavigate }) => {
         <div className="p-4 flex items-center gap-4" style={{ borderBottom: '1px solid var(--border-structural)', background: 'var(--surface-structural)' }}>
           <div className="search-bar" style={{ flex: 1, maxWidth: '400px', background: 'var(--surface-base)' }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ color: 'var(--text-secondary)' }}><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
-            <input type="text" placeholder="Search employees by name, ID, or email..." />
+            <input 
+              type="text" 
+              placeholder="Search employees by name, ID, or email..." 
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
             <span className="search-shortcut">⌘F</span>
           </div>
           
-          <select className="control-select" style={{ background: 'var(--surface-base)' }}>
-            <option>All Departments</option>
-          </select>
-          <select className="control-select" style={{ background: 'var(--surface-base)' }}>
-            <option>All Positions</option>
-          </select>
-          <select className="control-select" style={{ background: 'var(--surface-base)' }}>
-            <option>All Status</option>
+          <select 
+            className="control-select" 
+            style={{ background: 'var(--surface-base)' }}
+            value={deptFilter}
+            onChange={(e) => setDeptFilter(e.target.value)}
+          >
+            <option value="All">All Departments</option>
+            <option value="Engineering">Engineering</option>
+            <option value="Product & UX">Product & UX</option>
+            <option value="People Ops">People Ops</option>
+            <option value="Sales & Growth">Sales & Growth</option>
+            <option value="Operations">Operations</option>
           </select>
 
           <div className="ml-auto flex items-center bg-white rounded-md border border-gray-200">
@@ -127,7 +199,7 @@ const EmployeeDirectoryView = ({ onNavigate }) => {
             </tr>
           </thead>
           <tbody>
-            {mockEmployees.map(emp => (
+            {filteredEmployees.map(emp => (
               <tr key={emp.id} className="cursor-pointer hover:bg-gray-50 transition-colors" onClick={() => onNavigate('employee_profile')}>
                 <td>
                   <div className="flex items-center gap-3">
@@ -150,7 +222,7 @@ const EmployeeDirectoryView = ({ onNavigate }) => {
                 <td>
                   <div className="flex items-center gap-2">
                     <div className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white" style={{ background: 'var(--primary)' }}>
-                      {emp.lead.split(' ').map(n=>n[0]).join('')}
+                      {emp.lead ? emp.lead.split(' ').map(n=>n[0]).join('') : 'EV'}
                     </div>
                     <span className="text-sm font-medium">{emp.lead}</span>
                   </div>
@@ -167,18 +239,92 @@ const EmployeeDirectoryView = ({ onNavigate }) => {
         </table>
 
         <div className="p-4 flex items-center justify-between border-t border-gray-200">
-          <div className="text-sm text-muted">Showing <span className="font-semibold text-gray-800">1-7</span> of <span className="font-semibold text-gray-800">248</span> employees · <span style={{ color: 'var(--secondary)' }}>Auto-syncing every 5m</span></div>
+          <div className="text-sm text-muted">Showing <span className="font-semibold text-gray-800">1-{filteredEmployees.length}</span> of <span className="font-semibold text-gray-800">{employees.length}</span> employees · <span style={{ color: 'var(--secondary)' }}>FastAPI Live Sync</span></div>
           <div className="flex items-center gap-1">
             <button className="w-8 h-8 flex items-center justify-center rounded text-gray-400 hover:bg-gray-100"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m15 18-6-6 6-6"/></svg></button>
             <button className="w-8 h-8 flex items-center justify-center rounded text-white font-medium text-sm" style={{ background: 'var(--primary)' }}>1</button>
             <button className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 text-sm">2</button>
-            <button className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 text-sm">3</button>
-            <span className="px-1 text-gray-400">...</span>
-            <button className="w-8 h-8 flex items-center justify-center rounded hover:bg-gray-100 text-sm">36</button>
             <button className="w-8 h-8 flex items-center justify-center rounded text-gray-800 hover:bg-gray-100"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m9 18 6-6-6-6"/></svg></button>
           </div>
         </div>
       </div>
+
+      {/* Add Employee Modal */}
+      {showAddModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: '#fff', borderRadius: '12px', width: '480px', padding: '24px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: 'var(--primary)' }}>Add New Employee</h3>
+              <button onClick={() => setShowAddModal(false)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '18px' }}>✕</button>
+            </div>
+            <form onSubmit={handleAddEmployee} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Full Name</label>
+                <input 
+                  type="text" 
+                  required 
+                  className="form-input" 
+                  value={newEmp.name} 
+                  onChange={e => setNewEmp({ ...newEmp, name: e.target.value })} 
+                  placeholder="e.g. Ramesh Chandra"
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Work Email</label>
+                <input 
+                  type="email" 
+                  required 
+                  className="form-input" 
+                  value={newEmp.email} 
+                  onChange={e => setNewEmp({ ...newEmp, email: e.target.value })} 
+                  placeholder="r.chandra@peoplepay360.internal"
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Department</label>
+                <select 
+                  className="control-select" 
+                  style={{ width: '100%' }}
+                  value={newEmp.dept} 
+                  onChange={e => setNewEmp({ ...newEmp, dept: e.target.value })}
+                >
+                  <option value="Engineering">Engineering</option>
+                  <option value="Product & UX">Product & UX</option>
+                  <option value="People Ops">People Ops</option>
+                  <option value="Sales & Growth">Sales & Growth</option>
+                  <option value="Operations">Operations</option>
+                  <option value="Finance">Finance</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Job Position</label>
+                <input 
+                  type="text" 
+                  required 
+                  className="form-input" 
+                  value={newEmp.position} 
+                  onChange={e => setNewEmp({ ...newEmp, position: e.target.value })} 
+                  placeholder="e.g. Senior Software Engineer"
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Location</label>
+                <input 
+                  type="text" 
+                  className="form-input" 
+                  value={newEmp.location} 
+                  onChange={e => setNewEmp({ ...newEmp, location: e.target.value })} 
+                  placeholder="e.g. Bengaluru Hub"
+                />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '12px' }}>
+                <button type="button" className="btn-secondary" onClick={() => setShowAddModal(false)}>Cancel</button>
+                <button type="submit" className="btn-primary">Create Employee</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </>
   );
 };
