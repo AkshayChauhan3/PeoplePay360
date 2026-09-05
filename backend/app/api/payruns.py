@@ -20,6 +20,7 @@ from app.dependencies.auth import (
 )
 from app.models.payrun import PayrunStatus
 from app.models.payslip import PayslipStatus
+from app.models.user import User
 from app.schemas.email_delivery import (
     EmailDeliverySummaryResponse,
     SendPayslipsRequest,
