@@ -7,6 +7,42 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.0.8] — 2026-09-06
+
+### Summary
+Post-Phase 7 Module 1 — **Employee Banking Details & Bank Payout File Export Engine**.
+Enables enterprise corporate salary disbursement by storing employee banking credentials and generating bank-compliant batch payout files for upload to corporate net banking portals (e.g. HDFC Enet, ICICI Corporate). Includes pre-disbursement readiness audits, strict validation modes, masked banking details on PDF payslips, and segregation of duties under RBAC.
+
+### Added
+
+#### Database Models & Migrations
+- `alembic/versions/0008_add_employee_bank_details.py` — Adds `bank_name`, `bank_account_number`, `ifsc_code`, `pan_number`, and `account_holder_name` columns to `employees` table (all nullable with full downgrade support).
+- `app/models/employee.py` — Mapped `bank_name`, `bank_account_number`, `ifsc_code`, `pan_number`, and `account_holder_name` fields on `Employee` model.
+
+#### Schemas (`app/schemas/`)
+- `schemas/employee.py` — Updated `EmployeeCreate`, `EmployeeUpdate`, and `EmployeeResponse` with banking fields, adding sanitizers and uppercase normalization validators for `ifsc_code` and `pan_number`.
+- `schemas/payout.py` — Created `MissingBankInfoEmployee` and `BankPayoutSummaryResponse` schemas for audit reports.
+
+#### Service Layer (`app/services/`)
+- `services/payout_export_service.py`:
+  - `get_bank_payout_summary()` — Audits a payrun's bank account readiness, calculates total disbursement amount, and reports employees with missing bank details.
+  - `generate_bank_payout_csv()` — Generates formatted CSV files with corporate presets:
+    - `standard`: Universal 10-column HRMS payout file.
+    - `hdfc`: HDFC Bank Enet CMS format (NEFT/RTGS transaction routing).
+    - `icici`: ICICI Corporate Bulk Payment format.
+    - `strict`: Toggle that blocks export with HTTP 422 if any employee has missing bank details.
+- `services/employee_service.py` — Updated `create_employee` and `update_employee` to persist banking details.
+- `services/pdf_service.py` — Enhanced Employee Information Grid on PDF payslips to display Bank Name, masked account number (`•••• 1234`), IFSC, and PAN.
+
+#### API Endpoints (`app/api/payruns.py`)
+- `GET /api/v1/payruns/{id}/bank-payout-summary` — Pre-disbursement audit summary.
+- `GET /api/v1/payruns/{id}/export-bank-file` — Streaming CSV download for bank portal upload.
+
+#### Automated Test Suite
+- `tests/test_payout_export.py` — 7 comprehensive tests covering banking CRUD, normalization, audit summaries, strict mode rejection, CSV format validation, RBAC segregation of duties, and PDF payslip bank detail inclusion.
+
+---
+
 ## [0.0.7] — 2026-09-05
 
 ### Summary

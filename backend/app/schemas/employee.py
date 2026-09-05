@@ -34,6 +34,11 @@ class EmployeeCreate(BaseModel):
     job_position_id: int = Field(..., description="Referenced job position ID")
     manager_id: int | None = Field(default=None, description="Optional manager employee ID")
     status: EmployeeStatus = Field(default=EmployeeStatus.ACTIVE, description="Initial employee status")
+    bank_name: str | None = Field(default=None, max_length=100, description="Name of the employee's bank")
+    bank_account_number: str | None = Field(default=None, max_length=50, description="Bank account number")
+    ifsc_code: str | None = Field(default=None, max_length=20, description="Bank branch IFSC code")
+    pan_number: str | None = Field(default=None, max_length=20, description="Permanent Account Number (PAN)")
+    account_holder_name: str | None = Field(default=None, max_length=100, description="Beneficiary account holder name")
 
     @field_validator("manager_id", mode="before")
     @classmethod
@@ -52,6 +57,16 @@ class EmployeeCreate(BaseModel):
     def normalize_names(cls, v: str) -> str:
         return v.strip()
 
+    @field_validator("ifsc_code", "pan_number")
+    @classmethod
+    def normalize_banking_codes(cls, v: str | None) -> str | None:
+        return v.strip().upper() if v else None
+
+    @field_validator("bank_account_number", "bank_name", "account_holder_name")
+    @classmethod
+    def normalize_banking_strings(cls, v: str | None) -> str | None:
+        return v.strip() if v else None
+
 
 class EmployeeUpdate(BaseModel):
     """Schema for updating an existing employee (PATCH semantics)."""
@@ -67,6 +82,11 @@ class EmployeeUpdate(BaseModel):
     job_position_id: int | None = Field(default=None)
     manager_id: int | None = Field(default=None)
     status: EmployeeStatus | None = Field(default=None)
+    bank_name: str | None = Field(default=None, max_length=100)
+    bank_account_number: str | None = Field(default=None, max_length=50)
+    ifsc_code: str | None = Field(default=None, max_length=20)
+    pan_number: str | None = Field(default=None, max_length=20)
+    account_holder_name: str | None = Field(default=None, max_length=100)
 
     @field_validator("employee_code")
     @classmethod
@@ -77,6 +97,16 @@ class EmployeeUpdate(BaseModel):
     @classmethod
     def normalize_names(cls, v: str | None) -> str | None:
         return v.strip() if v is not None else None
+
+    @field_validator("ifsc_code", "pan_number")
+    @classmethod
+    def normalize_banking_codes(cls, v: str | None) -> str | None:
+        return v.strip().upper() if v else None
+
+    @field_validator("bank_account_number", "bank_name", "account_holder_name")
+    @classmethod
+    def normalize_banking_strings(cls, v: str | None) -> str | None:
+        return v.strip() if v else None
 
 
 class EmployeeResponse(BaseModel):
@@ -97,6 +127,11 @@ class EmployeeResponse(BaseModel):
     job_position_id: int
     manager_id: int | None
     status: EmployeeStatus
+    bank_name: str | None = None
+    bank_account_number: str | None = None
+    ifsc_code: str | None = None
+    pan_number: str | None = None
+    account_holder_name: str | None = None
 
     department: DepartmentResponse | None = None
     job_position: JobPositionResponse | None = None

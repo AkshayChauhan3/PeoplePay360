@@ -85,6 +85,22 @@ def generate_payslip_pdf(
     contract_ref = payslip.contract.contract_number if payslip.contract else "N/A"
     contact_info = emp.email if emp and emp.email else "N/A"
 
+    # Masked banking details for payroll confidentiality
+    raw_acct = emp.bank_account_number if emp and emp.bank_account_number else None
+    if raw_acct and len(raw_acct) > 4:
+        masked_acct = f"•••• {raw_acct[-4:]}"
+    elif raw_acct:
+        masked_acct = raw_acct
+    else:
+        masked_acct = "N/A"
+
+    bank_display = f"{emp.bank_name} ({masked_acct})" if (emp and emp.bank_name and raw_acct) else (emp.bank_name or masked_acct)
+    ifsc_display = emp.ifsc_code if emp and emp.ifsc_code else "N/A"
+    if emp and emp.pan_number:
+        tax_str = f"{ifsc_display} (PAN: {emp.pan_number})"
+    else:
+        tax_str = ifsc_display
+
     emp_info_data = [
         [
             Paragraph("Employee Name:", label_style),
@@ -103,6 +119,12 @@ def generate_payslip_pdf(
             Paragraph(contract_ref, value_style),
             Paragraph("Email / Contact:", label_style),
             Paragraph(contact_info, value_style),
+        ],
+        [
+            Paragraph("Bank / Account:", label_style),
+            Paragraph(bank_display, value_style),
+            Paragraph("IFSC / Tax:", label_style),
+            Paragraph(tax_str, value_style),
         ],
         [
             Paragraph("Worked Days:", label_style),

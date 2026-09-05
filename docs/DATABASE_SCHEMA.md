@@ -102,6 +102,11 @@ erDiagram
         int manager_id FK "-> employees.id (nullable)"
         int working_schedule_id FK "-> working_schedules.id (nullable)"
         employeestatus status "ACTIVE, INACTIVE, ON_LEAVE, TERMINATED"
+        varchar bank_name "nullable"
+        varchar bank_account_number "nullable"
+        varchar ifsc_code "nullable"
+        varchar pan_number "nullable"
+        varchar account_holder_name "nullable"
         timestamptz created_at "default now()"
         timestamptz updated_at "default now()"
     }
@@ -338,6 +343,11 @@ The central HR business person entity.
 | `manager_id` | `INTEGER` | `YES` | `NULL` | `FK -> employees.id`, `INDEXED` | Manager self-referencing foreign key |
 | `working_schedule_id` | `INTEGER` | `YES` | `NULL` | `FK -> working_schedules.id`, `INDEXED` | Assigned working schedule (`SET NULL` on delete) |
 | `status` | `employeestatus` | `NO` | `'ACTIVE'` | `ENUM` | Lifecycle status |
+| `bank_name` | `VARCHAR(100)` | `YES` | `NULL` | — | Beneficiary bank name (e.g. `HDFC Bank`) |
+| `bank_account_number` | `VARCHAR(50)` | `YES` | `NULL` | — | Beneficiary bank account number |
+| `ifsc_code` | `VARCHAR(20)` | `YES` | `NULL` | — | Indian Financial System Code (e.g. `HDFC0001234`) |
+| `pan_number` | `VARCHAR(20)` | `YES` | `NULL` | — | Permanent Account Number for tax compliance |
+| `account_holder_name` | `VARCHAR(100)` | `YES` | `NULL` | — | Name on bank account (falls back to employee name) |
 | `created_at` | `TIMESTAMPTZ` | `NO` | `now()` | — | Creation timestamp (UTC) |
 | `updated_at` | `TIMESTAMPTZ` | `NO` | `now()` | — | Update timestamp (UTC) |
 

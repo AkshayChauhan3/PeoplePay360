@@ -9,6 +9,7 @@ Manages the lifecycle of payroll batches:
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
@@ -20,6 +21,7 @@ from app.dependencies.auth import (
 from app.models.payrun import PayrunStatus
 from app.models.payslip import PayslipStatus
 from app.models.user import User
+from app.schemas.payout import BankPayoutSummaryResponse
 from app.schemas.payrun import (
     PayrunCreate,
     PayrunListResponse,
@@ -28,7 +30,7 @@ from app.schemas.payrun import (
     PayrunResponse,
 )
 from app.schemas.payslip import PayslipListResponse
-from app.services import payrun_service, payslip_service
+from app.services import payout_export_service, payrun_service, payslip_service
 
 router = APIRouter(prefix="/payruns", tags=["Payruns"])
 
@@ -241,4 +243,58 @@ async def list_payrun_payslips(
         skip=skip,
         limit=limit,
     )
+
+
+@router.get(
+    "/{payrun_id}/bank-payout-summary",
+    response_model=BankPayoutSummaryResponse,
+    summary="Audit payrun bank account readiness for payout",
+)
+async def get_payrun_bank_payout_summary(
+    payrun_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_payroll_read()),
+):
+    """
+    Returns an audit summary of bank account details for all employees in the payrun batch.
+    Surfaces employees with missing bank accounts, IFSC codes, or bank names prior to export.
+    """
+    return await payout_export_service.get_bank_payout_summary(db, payrun_id)
+
+
+@router.get(
+    "/{payrun_id}/export-bank-file",
+    summary="Export corporate bank payout batch file (CSV)",
+)
+async def export_payrun_bank_file(
+    payrun_id: int,
+    bank_format: str = Query(
+        default="standard",
+        pattern="^(standard|hdfc|icici)$",
+        description="Target bank transfer format preset: 'standard', 'hdfc', or 'icici'",
+    ),
+    strict: bool = Query(
+        default=False,
+        description="If true, returns 422 if any employee is missing bank account or IFSC details",
+    ),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_payroll_read()),
+):
+    """
+    Downloads a structured, formatted bank payout batch file (CSV) for uploading
+    directly to corporate banking portals (e.g. HDFC Enet, ICICI Corporate).
+    Requires the payrun to be in COMPUTED, VALIDATED, or PAID state.
+    """
+    csv_content, filename = await payout_export_service.generate_bank_payout_csv(
+        db, payrun_id, bank_format=bank_format, strict=strict
+    )
+    return StreamingResponse(
+        iter([csv_content]),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Access-Control-Expose-Headers": "Content-Disposition",
+        },
+    )
+
 

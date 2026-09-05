@@ -147,6 +147,34 @@ class Employee(Base):
     )
 
     # ------------------------------------------------------------------
+    # Banking & Financial Details (Corporate Payout)
+    # ------------------------------------------------------------------
+    bank_name: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
+
+    bank_account_number: Mapped[str | None] = mapped_column(
+        String(50),
+        nullable=True,
+    )
+
+    ifsc_code: Mapped[str | None] = mapped_column(
+        String(20),
+        nullable=True,
+    )
+
+    pan_number: Mapped[str | None] = mapped_column(
+        String(20),
+        nullable=True,
+    )
+
+    account_holder_name: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
+
+    # ------------------------------------------------------------------
     # Lifecycle Status
     # ------------------------------------------------------------------
     status: Mapped[EmployeeStatus] = mapped_column(

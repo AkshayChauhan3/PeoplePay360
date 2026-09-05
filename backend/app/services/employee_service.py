@@ -140,6 +140,11 @@ async def create_employee(db: AsyncSession, data: EmployeeCreate) -> Employee:
         job_position_id=data.job_position_id,
         manager_id=data.manager_id,
         status=data.status,
+        bank_name=data.bank_name,
+        bank_account_number=data.bank_account_number,
+        ifsc_code=data.ifsc_code,
+        pan_number=data.pan_number,
+        account_holder_name=data.account_holder_name,
     )
     db.add(employee)
     await db.flush()
@@ -305,6 +310,16 @@ async def update_employee(db: AsyncSession, employee_id: int, data: EmployeeUpda
         employee.joining_date = data.joining_date
     if data.status is not None:
         employee.status = data.status
+    if data.bank_name is not None:
+        employee.bank_name = data.bank_name
+    if data.bank_account_number is not None:
+        employee.bank_account_number = data.bank_account_number
+    if data.ifsc_code is not None:
+        employee.ifsc_code = data.ifsc_code
+    if data.pan_number is not None:
+        employee.pan_number = data.pan_number
+    if data.account_holder_name is not None:
+        employee.account_holder_name = data.account_holder_name
 
     await db.flush()
     res = await get_employee_by_id(db, employee_id)
