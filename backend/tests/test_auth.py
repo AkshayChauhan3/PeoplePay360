@@ -10,6 +10,7 @@ Authentication test suite — PeoplePay360 v0.0.1
   - Protected endpoints (authenticated, unauthenticated)
 """
 
+import asyncio
 from datetime import timedelta
 from typing import Any
 
@@ -29,14 +30,16 @@ from app.models.user import User
 async def test_register_success(async_client: AsyncClient) -> None:
     response = await async_client.post(
         "/api/v1/auth/register",
-        json={"email": "new@example.com", "password": "NewPass1", "role": "EMPLOYEE"},
+        json={"email": "new@example.com", "password": "NewPass1", "role_id": 1},
     )
     assert response.status_code == 201
     body = response.json()
     assert body["email"] == "new@example.com"
+    assert body["role_id"] == 1
     assert body["role"] == "EMPLOYEE"
     assert body["is_active"] is True
     assert "id" in body
+    assert isinstance(body["id"], int)
 
 
 # ===========================================================================
@@ -46,7 +49,7 @@ async def test_register_success(async_client: AsyncClient) -> None:
 async def test_register_duplicate_email(async_client: AsyncClient, registered_user: dict[str, Any]) -> None:
     response = await async_client.post(
         "/api/v1/auth/register",
-        json={"email": "test@example.com", "password": "AnotherPass1", "role": "EMPLOYEE"},
+        json={"email": "test@example.com", "password": "AnotherPass1", "role_id": 1},
     )
     assert response.status_code == 409
 
@@ -75,7 +78,7 @@ async def test_password_is_hashed(
 async def test_register_no_password_in_response(async_client: AsyncClient) -> None:
     response = await async_client.post(
         "/api/v1/auth/register",
-        json={"email": "safe@example.com", "password": "SafePass1", "role": "HR_MANAGER"},
+        json={"email": "safe@example.com", "password": "SafePass1", "role_id": 2},
     )
     assert response.status_code == 201
     body = response.json()
@@ -179,7 +182,7 @@ async def test_me_with_expired_token(
 
     expired_token = jwt.encode(
         {
-            "sub": registered_user["id"],
+            "sub": str(registered_user["id"]),
             "type": "access",
             "exp": datetime(2000, 1, 1, tzinfo=timezone.utc),
         },
@@ -194,15 +197,37 @@ async def test_me_with_expired_token(
 
 
 # ===========================================================================
-# 11. Invalid role in registration → 422
+# 11. Role ID in registration
 # ===========================================================================
 
-async def test_register_invalid_role(async_client: AsyncClient) -> None:
+async def test_register_invalid_role_id(async_client: AsyncClient) -> None:
     response = await async_client.post(
         "/api/v1/auth/register",
-        json={"email": "badrole@example.com", "password": "ValidPass1", "role": "SUPERUSER"},
+        json={"email": "badrole@example.com", "password": "ValidPass1", "role_id": 9999},
     )
-    assert response.status_code == 422
+    assert response.status_code == 400
+
+
+async def test_register_with_role_id_directly(async_client: AsyncClient) -> None:
+    response = await async_client.post(
+        "/api/v1/auth/register",
+        json={"email": "roleiduser@example.com", "password": "ValidPass1", "role_id": 2},
+    )
+    assert response.status_code == 201
+    data = response.json()
+    assert data["role_id"] == 2
+    assert data["role"] == "HR_MANAGER"
+
+
+async def test_register_default_role_id_omitted(async_client: AsyncClient) -> None:
+    response = await async_client.post(
+        "/api/v1/auth/register",
+        json={"email": "defaultrole@example.com", "password": "ValidPass1"},
+    )
+    assert response.status_code == 201
+    data = response.json()
+    assert data["role_id"] == 1
+    assert data["role"] == "EMPLOYEE"
 
 
 # ===========================================================================
@@ -222,6 +247,8 @@ async def test_refresh_with_valid_token(
     async_client: AsyncClient,
     auth_tokens: dict[str, str],
 ) -> None:
+    # Ensure issued-at (iat) second increments so new token differs
+    await asyncio.sleep(1.05)
     response = await async_client.post(
         "/api/v1/auth/refresh",
         json={"refresh_token": auth_tokens["refresh_token"]},
@@ -260,7 +287,7 @@ async def test_refresh_with_expired_token(
 
     expired_refresh = jwt.encode(
         {
-            "sub": registered_user["id"],
+            "sub": str(registered_user["id"]),
             "type": "refresh",
             "exp": datetime(2000, 1, 1, tzinfo=timezone.utc),
         },

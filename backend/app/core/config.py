@@ -1,13 +1,21 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+_ROOT_DIR = _BACKEND_DIR.parent
 
 
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(
+            ".env",
+            str(_BACKEND_DIR / ".env"),
+            str(_ROOT_DIR / ".env"),
+        ),
         env_file_encoding="utf-8",
         case_sensitive=False,
     )
@@ -26,7 +34,7 @@ class Settings(BaseSettings):
 
     # Application
     app_env: str = "development"
-    app_version: str = "0.0.1"
+    app_version: str = "0.0.7"
 
     @property
     def cors_origins_list(self) -> list[str]:
@@ -45,4 +53,3 @@ def get_settings() -> Settings:
 
 
 settings: Settings = get_settings()
-

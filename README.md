@@ -47,15 +47,27 @@ PeoplePay360/
 | Version | Description |
 |---|---|
 | [v0.0.1](backend/CHANGELOG.md) | User & Authentication Foundation |
+| [v0.0.2](backend/CHANGELOG.md) | Employee Master & HR Master Data (Roles, Departments, Job Positions, Employees) |
+| [v0.0.3](backend/CHANGELOG.md) | Employment Contracts & Lifecycle Management |
+| [v0.0.4](backend/CHANGELOG.md) | Attendance Management & Working Schedules |
+| [v0.0.5](backend/CHANGELOG.md) | Time Off Management (Leave Types, Allocations, Requests, Balances) |
+| [v0.0.6](backend/CHANGELOG.md) | Salary Structures, Salary Rules & Calculation Engine |
+| [v0.0.7](backend/CHANGELOG.md) | Payruns, Payslips & Payroll Processing Engine |
 
-## Quick Start
+
+## Getting Started
+
+For full system prerequisites, database configuration, onboarding walkthrough, and troubleshooting, see the [STARTUP.md](STARTUP.md) guide.
+
+### Quick Start
 
 ```bash
 cd backend
 cp .env.example .env        # fill DATABASE_URL and SECRET_KEY
+source .venv/bin/activate
 pip install -e ".[dev]"
 alembic upgrade head
-uvicorn app.main:app --reload
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 API docs available at: `http://localhost:8000/docs`
@@ -64,6 +76,7 @@ API docs available at: `http://localhost:8000/docs`
 
 ```bash
 cd backend
+source .venv/bin/activate
 pytest tests/ -v
 ```
 

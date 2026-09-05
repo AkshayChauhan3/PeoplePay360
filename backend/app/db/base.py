@@ -11,13 +11,15 @@ class Base(DeclarativeBase):
     pass
 
 
-# Import every model module here so Alembic and SQLAlchemy see their metadata
-# when env.py or database session imports Base.
-from app.models import company as _company_model  # noqa: F401, E402
-from app.models import contract as _contract_model  # noqa: F401, E402
-from app.models import department as _department_model  # noqa: F401, E402
-from app.models import employee as _employee_model  # noqa: F401, E402
-from app.models import schedule as _schedule_model  # noqa: F401, E402
-from app.models import user as _user_model  # noqa: F401, E402
+# Import every model module here so Alembic sees their metadata
+# when env.py imports Base.
+from app.models import (  # noqa: F401, E402
+    company as _company_model,
+    contract as _contract_model,
+    department as _department_model,
+    employee as _employee_model,
+    schedule as _schedule_model,
+    user as _user_model,
+)
 
 
