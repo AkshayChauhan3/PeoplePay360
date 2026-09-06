@@ -42,14 +42,14 @@ router = APIRouter(prefix="/contracts", tags=["Contracts"])
 async def create_contract(
     data: ContractCreate,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_master_data_admin()),
+    _: User = Depends(require_hr_management()),
 ) -> Contract:
     """
     Create a new contract for an employee.
 
     RBAC Policy:
-    - Allowed roles: ADMIN, HR_MANAGER, HR_PAYROLL_MANAGER.
-    - Prohibited: EMPLOYEE, HR_PAYROLL_USER (403 Forbidden).
+    - Allowed roles: ADMIN, HR_MANAGER, HR_PAYROLL_MANAGER, HR_PAYROLL_USER.
+    - Prohibited: EMPLOYEE (403 Forbidden).
 
     Business Validations:
     - contract_number must be unique.
@@ -145,13 +145,13 @@ async def update_contract(
     contract_id: int,
     data: ContractUpdate,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_master_data_admin()),
+    _: User = Depends(require_hr_management()),
 ) -> Contract:
     """
     Partially update contract terms, wage, dates, or status.
 
     RBAC Policy:
-    - Allowed roles: ADMIN, HR_MANAGER, HR_PAYROLL_MANAGER.
+    - Allowed roles: ADMIN, HR_MANAGER, HR_PAYROLL_MANAGER, HR_PAYROLL_USER.
     """
     return await contract_service.update_contract(db, contract_id, data)
 

@@ -59,27 +59,39 @@ const AllContractsView = ({ onNavigate, filterEmployeeId, onClearFilter }) => {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [showModal, setShowModal] = useState(false);
   const [employees, setEmployees] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [jobPositions, setJobPositions] = useState([]);
+  const [structures, setStructures] = useState([]);
   const [saving, setSaving] = useState(false);
   const [createError, setCreateError] = useState('');
-  const [structures, setStructures] = useState([]);
+  const [toastMsg, setToastMsg] = useState('');
   const [newContract, setNewContract] = useState({
     employeeId: '',
     contractNumber: '',
     wage: 150000,
+    departmentId: '',
+    jobPositionId: '',
     structureId: '',
     status: 'DRAFT',
     startDate: new Date().toISOString().split('T')[0],
     endDate: '',
   });
 
+  const showToast = (msg) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(''), 4000);
+  };
+
   const fetchContracts = async () => {
     setLoading(true);
     setError(null);
     try {
-      const [contractsData, empsData, structuresData] = await Promise.allSettled([
+      const [contractsData, empsData, structuresData, deptsData, posData] = await Promise.allSettled([
         apiService.getContracts(),
-        apiService.getEmployees({ limit: 100 }),
-        apiService.getSalaryStructures(),
+        apiService.getEmployees({ limit: 500 }),
+        apiService.getSalaryStructures({ limit: 100 }),
+        apiService.getDepartments(),
+        apiService.getJobPositions(),
       ]);
       if (contractsData.status === 'fulfilled') {
         const raw = contractsData.value?.items || contractsData.value?.data || (Array.isArray(contractsData.value) ? contractsData.value : []);
@@ -88,23 +100,21 @@ const AllContractsView = ({ onNavigate, filterEmployeeId, onClearFilter }) => {
       if (empsData.status === 'fulfilled') {
         const rawEmps = empsData.value?.items || (Array.isArray(empsData.value) ? empsData.value : []);
         setEmployees(rawEmps);
-        if (rawEmps.length > 0) {
-          setNewContract(prev => ({
-            ...prev,
-            employeeId: prev.employeeId || rawEmps[0].id,
-            contractNumber: prev.contractNumber || `CNT-2026-${String(Date.now()).slice(-4)}`,
-          }));
-        }
       }
       if (structuresData.status === 'fulfilled') {
         const rawStructs = structuresData.value?.items || (Array.isArray(structuresData.value) ? structuresData.value : []);
         setStructures(rawStructs);
-        if (rawStructs.length > 0) {
-          setNewContract(prev => ({ ...prev, structureId: prev.structureId || rawStructs[0].id }));
-        }
+      }
+      if (deptsData.status === 'fulfilled') {
+        const rawDepts = Array.isArray(deptsData.value) ? deptsData.value : (deptsData.value?.items || []);
+        setDepartments(rawDepts);
+      }
+      if (posData.status === 'fulfilled') {
+        const rawPos = Array.isArray(posData.value) ? posData.value : (posData.value?.items || []);
+        setJobPositions(rawPos);
       }
     } catch (err) {
-      console.error('Failed to fetch contracts:', err);
+      console.error('Failed to fetch contracts data:', err);
       setError(err.message || 'Unable to load contracts from database.');
       setContracts([]);
     } finally {
@@ -115,6 +125,35 @@ const AllContractsView = ({ onNavigate, filterEmployeeId, onClearFilter }) => {
   useEffect(() => {
     fetchContracts();
   }, []);
+
+  const handleOpenCreateModal = () => {
+    const nextNum = `CNT-2026-${String(Date.now()).slice(-4)}`;
+    const defaultEmpId = filterEmployeeId || (employees.length > 0 ? employees[0].id : '');
+    const defaultEmp = employees.find(e => String(e.id) === String(defaultEmpId));
+    setNewContract({
+      employeeId: defaultEmpId,
+      contractNumber: nextNum,
+      wage: 150000,
+      departmentId: defaultEmp?.department_id ? String(defaultEmp.department_id) : '',
+      jobPositionId: defaultEmp?.job_position_id ? String(defaultEmp.job_position_id) : '',
+      structureId: structures.length > 0 ? String(structures[0].id) : '',
+      status: 'DRAFT',
+      startDate: new Date().toISOString().split('T')[0],
+      endDate: '',
+    });
+    setCreateError('');
+    setShowModal(true);
+  };
+
+  const handleSelectEmployee = (empId) => {
+    const foundEmp = employees.find(e => String(e.id) === String(empId));
+    setNewContract(prev => ({
+      ...prev,
+      employeeId: empId ?? '',
+      departmentId: foundEmp?.department_id ? String(foundEmp.department_id) : prev.departmentId,
+      jobPositionId: foundEmp?.job_position_id ? String(foundEmp.job_position_id) : prev.jobPositionId,
+    }));
+  };
 
   const handleCreate = async (e) => {
     e.preventDefault();
@@ -132,19 +171,24 @@ const AllContractsView = ({ onNavigate, filterEmployeeId, onClearFilter }) => {
       const endDate = newContract.endDate ? newContract.endDate : null;
       const wageVal = Number(newContract.wage) || 150000;
       const structId = newContract.structureId ? Number(newContract.structureId) : null;
+      const deptId = newContract.departmentId ? Number(newContract.departmentId) : null;
+      const posId = newContract.jobPositionId ? Number(newContract.jobPositionId) : null;
       const contractStatus = newContract.status || 'DRAFT';
 
-      await apiService.createContract({
-        employee_id: empId,
+      const res = await apiService.createContract({
+        employee_id: Number(empId),
         contract_number: contractNum,
         start_date: startDate,
         end_date: endDate,
         wage: wageVal,
+        department_id: deptId,
+        job_position_id: posId,
         salary_structure_id: structId,
         status: contractStatus,
       });
 
       setShowModal(false);
+      showToast(`✓ Contract ${res.contract_number || contractNum} created successfully in database!`);
       await fetchContracts();
     } catch (err) {
       console.error('Failed to create contract:', err);
@@ -229,12 +273,18 @@ const AllContractsView = ({ onNavigate, filterEmployeeId, onClearFilter }) => {
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
             Export Register
           </button>
-          <button className="btn-primary" onClick={() => setShowModal(true)}>
+          <button className="btn-primary" onClick={handleOpenCreateModal}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
             Create Contract
           </button>
         </div>
       </div>
+
+      {toastMsg && (
+        <div style={{ background: '#ecfdf5', border: '1px solid #10b981', color: '#065f46', padding: '10px 16px', borderRadius: '8px', marginBottom: '16px', fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span>✓</span> {toastMsg}
+        </div>
+      )}
 
       {filterEmployeeId && (
         <div style={{ 
@@ -460,134 +510,328 @@ const AllContractsView = ({ onNavigate, filterEmployeeId, onClearFilter }) => {
       </div>
 
       {/* Create Contract Modal */}
-      {showModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '16px' }}>
-          <div style={{ background: '#fff', borderRadius: '12px', width: '520px', maxWidth: '95vw', padding: '24px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: 'var(--primary)' }}>New Employment Contract</h3>
-              <button onClick={() => setShowModal(false)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '18px', color: 'var(--text-secondary)' }}>✕</button>
+      {showModal && (() => {
+        const selectedEmployee = employees.find(e => String(e.id) === String(newContract.employeeId));
+        const hasExistingRunningContract = contracts.find(c =>
+          (String(c.employeeId) === String(newContract.employeeId) || (selectedEmployee && String(c.empId) === String(selectedEmployee.employee_code))) &&
+          c.status === 'RUNNING'
+        );
+        const selectedStructure = structures.find(s => String(s.id) === String(newContract.structureId));
+
+        return (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 1100, padding: '24px 16px', overflowY: 'auto' }}>
+            <div style={{ background: '#fff', borderRadius: '14px', width: '640px', maxWidth: '100%', padding: '24px 28px', boxShadow: '0 24px 40px rgba(0,0,0,0.18)', marginBottom: '24px' }}>
+              
+              {/* Modal Header */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '18px', paddingBottom: '12px', borderBottom: '1px solid #e2e8f0' }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: 'var(--primary)' }}>📄 New Employment Contract</h3>
+                  <p style={{ margin: '3px 0 0', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                    Set up contract terms, organizational details, and allocate compensation salary structure.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowModal(false)}
+                  style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '20px', color: 'var(--text-secondary)', lineHeight: 1 }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              {createError && (
+                <div style={{ padding: '10px 14px', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: '8px', color: '#b91c1c', fontSize: '12.5px', marginBottom: '16px', lineHeight: 1.4, fontWeight: 500 }}>
+                  ⚠️ {createError}
+                </div>
+              )}
+
+              <form onSubmit={handleCreate} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+                
+                {/* ── SECTION 1: CONTRACT & EMPLOYEE INFO ──────────────────────── */}
+                <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '16px' }}>
+                  <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span>📋</span> 1. Contract & Employee Information
+                  </div>
+
+                  {/* Employee Selection */}
+                  <div style={{ marginBottom: '14px' }}>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '5px', color: 'var(--text-primary)' }}>Select Employee *</label>
+                    <EntityCombobox
+                      value={newContract.employeeId}
+                      onChange={handleSelectEmployee}
+                      options={employees.map(emp => ({
+                        id: emp.id,
+                        label: `${emp.first_name} ${emp.last_name}`,
+                        sublabel: `${emp.employee_code} · ${emp.department?.name || 'Dept'} · ${emp.job_position?.name || emp.job_title || 'Staff'}`
+                      }))}
+                      placeholder="Search employee by name, code, or ID…"
+                      required
+                    />
+                    
+                    {/* Selected Employee Summary Badge */}
+                    {selectedEmployee && (
+                      <div style={{ marginTop: '8px', padding: '8px 12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                        <span style={{ fontWeight: 700, color: 'var(--primary)' }}>👤 {selectedEmployee.first_name} {selectedEmployee.last_name}</span>
+                        <span style={{ color: '#94a3b8' }}>•</span>
+                        <span style={{ fontFamily: 'monospace', fontWeight: 600, color: '#475569', background: '#e2e8f0', padding: '1px 6px', borderRadius: '4px' }}>{selectedEmployee.employee_code}</span>
+                        <span style={{ color: '#94a3b8' }}>•</span>
+                        <span style={{ color: '#0f766e', fontWeight: 600 }}>{selectedEmployee.department?.name || 'Department Unassigned'}</span>
+                        <span style={{ color: '#94a3b8' }}>•</span>
+                        <span style={{ color: '#64748b' }}>{selectedEmployee.job_position?.name || selectedEmployee.job_title || 'Staff'}</span>
+                      </div>
+                    )}
+
+                    {/* Running Contract Warning */}
+                    {hasExistingRunningContract && (
+                      <div style={{ marginTop: '8px', padding: '8px 12px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '6px', fontSize: '12px', color: '#92400e', display: 'flex', alignItems: 'flex-start', gap: '6px' }}>
+                        <span>⚠️</span>
+                        <span>
+                          <strong>Existing Contract Conflict Warning:</strong> Employee already has an active RUNNING contract (<strong>{hasExistingRunningContract.id}</strong>). Setting this contract's initial status to <strong>DRAFT</strong> is recommended to prevent date overlap conflicts.
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Contract Number & Status */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '5px', color: 'var(--text-primary)' }}>Contract Reference / Number *</label>
+                      <input
+                        type="text"
+                        required
+                        className="form-input"
+                        value={newContract.contractNumber}
+                        onChange={e => setNewContract({ ...newContract, contractNumber: e.target.value.toUpperCase() })}
+                        placeholder="e.g. CNT-2026-0045"
+                        style={{ width: '100%', height: '38px', borderRadius: '8px', padding: '0 10px', boxSizing: 'border-box', fontFamily: 'monospace', fontWeight: 600 }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '5px', color: 'var(--text-primary)' }}>Initial Status *</label>
+                      <select
+                        className="control-select"
+                        style={{ width: '100%', height: '38px', borderRadius: '8px' }}
+                        value={newContract.status}
+                        onChange={e => setNewContract({ ...newContract, status: e.target.value })}
+                      >
+                        <option value="DRAFT">DRAFT (Pending Activation)</option>
+                        <option value="RUNNING">RUNNING (Active Immediately)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Start Date & End Date */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '5px', color: 'var(--text-primary)' }}>Effective Start Date *</label>
+                      <input
+                        type="date"
+                        required
+                        className="form-input"
+                        value={newContract.startDate}
+                        onChange={e => setNewContract({ ...newContract, startDate: e.target.value })}
+                        style={{ width: '100%', height: '38px', borderRadius: '8px', padding: '0 10px', boxSizing: 'border-box' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '5px', color: 'var(--text-primary)' }}>End Date (Permanent if blank)</label>
+                      <input
+                        type="date"
+                        className="form-input"
+                        value={newContract.endDate}
+                        onChange={e => setNewContract({ ...newContract, endDate: e.target.value })}
+                        style={{ width: '100%', height: '38px', borderRadius: '8px', padding: '0 10px', boxSizing: 'border-box' }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Department & Job Position Overrides */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '5px', color: 'var(--text-primary)' }}>Department (Contract Org)</label>
+                      <select
+                        className="control-select"
+                        style={{ width: '100%', height: '38px', borderRadius: '8px' }}
+                        value={newContract.departmentId || ''}
+                        onChange={e => setNewContract({ ...newContract, departmentId: e.target.value })}
+                      >
+                        <option value="">— Employee Default Department —</option>
+                        {departments.map(d => (
+                          <option key={d.id} value={String(d.id)}>{d.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '5px', color: 'var(--text-primary)' }}>Job Position (Contract Role)</label>
+                      <select
+                        className="control-select"
+                        style={{ width: '100%', height: '38px', borderRadius: '8px' }}
+                        value={newContract.jobPositionId || ''}
+                        onChange={e => setNewContract({ ...newContract, jobPositionId: e.target.value })}
+                      >
+                        <option value="">— Employee Default Position —</option>
+                        {jobPositions.map(p => (
+                          <option key={p.id} value={String(p.id)}>{p.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Monthly Wage */}
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '5px' }}>
+                      <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>Monthly Gross Wage (₹) *</label>
+                      <span style={{ fontSize: '12.5px', fontWeight: 700, color: '#059669' }}>
+                        ₹{Number(newContract.wage || 0).toLocaleString('en-IN')} / month
+                      </span>
+                    </div>
+                    <input 
+                      type="number" 
+                      required 
+                      min="1"
+                      className="form-input" 
+                      value={newContract.wage} 
+                      onChange={e => setNewContract({ ...newContract, wage: Number(e.target.value) })} 
+                      style={{ width: '100%', height: '38px', borderRadius: '8px', padding: '0 10px', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                </div>
+
+                {/* ── SECTION 2: SALARY STRUCTURE ALLOCATION VIA ID ──────────── */}
+                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '16px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                    <div>
+                      <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span>🏢</span> 2. Salary Structure Allocation
+                      </div>
+                      <p style={{ margin: '2px 0 0', fontSize: '11.5px', color: 'var(--text-secondary)' }}>
+                        Assign compensation rules via Structure ID or select from registered salary structures
+                      </p>
+                    </div>
+                    {newContract.structureId && (
+                      <button
+                        type="button"
+                        onClick={() => setNewContract(prev => ({ ...prev, structureId: '' }))}
+                        style={{ fontSize: '11.5px', color: '#dc2626', background: 'transparent', border: 'none', cursor: 'pointer', fontWeight: 600 }}
+                      >
+                        ✕ Clear Structure
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Quick Pick Chips of registered structures */}
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '12px' }}>
+                    <span style={{ fontSize: '11px', color: 'var(--text-secondary)', alignSelf: 'center', marginRight: '4px' }}>Quick Select:</span>
+                    {structures.map(s => {
+                      const isSelected = String(s.id) === String(newContract.structureId);
+                      return (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={() => setNewContract(prev => ({ ...prev, structureId: isSelected ? '' : String(s.id) }))}
+                          style={{
+                            padding: '3px 9px',
+                            borderRadius: '16px',
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            border: isSelected ? '1.5px solid #059669' : '1px solid #cbd5e1',
+                            background: isSelected ? '#ecfdf5' : '#ffffff',
+                            color: isSelected ? '#065f46' : '#334155',
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            transition: 'all 0.1s ease',
+                          }}
+                        >
+                          <span style={{ fontFamily: 'monospace', fontWeight: 700 }}>#{s.id}</span>
+                          <span>{s.name.split(' ')[0]}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* ID Input and Selector side-by-side */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '150px 1fr', gap: '12px', alignItems: 'flex-start' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 600, marginBottom: '4px', color: 'var(--text-primary)' }}>
+                        Structure ID #
+                      </label>
+                      <input
+                        type="number"
+                        className="form-input"
+                        placeholder="e.g. 966"
+                        value={newContract.structureId || ''}
+                        onChange={e => setNewContract(prev => ({ ...prev, structureId: e.target.value }))}
+                        style={{ width: '100%', height: '38px', borderRadius: '8px', padding: '0 10px', boxSizing: 'border-box', fontFamily: 'monospace', fontWeight: 700 }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11.5px', fontWeight: 600, marginBottom: '4px', color: 'var(--text-primary)' }}>
+                        Select by Name & Code
+                      </label>
+                      <select
+                        className="control-select"
+                        value={newContract.structureId || ''}
+                        onChange={e => setNewContract(prev => ({ ...prev, structureId: e.target.value }))}
+                        style={{ width: '100%', height: '38px', borderRadius: '8px' }}
+                      >
+                        <option value="">— No Salary Structure (Optional) —</option>
+                        {structures.map(s => (
+                          <option key={s.id} value={String(s.id)}>
+                            [ID: #{s.id}] {s.name} ({s.code})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Selected Structure Confirmation Card */}
+                  {selectedStructure ? (
+                    <div style={{ marginTop: '12px', padding: '10px 14px', background: '#ecfdf5', border: '1px solid #6ee7b7', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span style={{ fontSize: '18px', color: '#059669' }}>✓</span>
+                        <div>
+                          <div style={{ fontSize: '12.5px', fontWeight: 700, color: '#065f46' }}>
+                            [ID #{selectedStructure.id}] {selectedStructure.name}
+                          </div>
+                          <div style={{ fontSize: '11px', color: '#047857', marginTop: '2px' }}>
+                            System Code: <strong style={{ fontFamily: 'monospace' }}>{selectedStructure.code}</strong> · Lifecycle: {selectedStructure.is_active ? 'Active' : 'Inactive'}
+                          </div>
+                        </div>
+                      </div>
+                      <span style={{ fontSize: '11px', fontWeight: 700, background: '#a7f3d0', color: '#065f46', padding: '2px 8px', borderRadius: '4px' }}>
+                        Ready to Link
+                      </span>
+                    </div>
+                  ) : newContract.structureId ? (
+                    <div style={{ marginTop: '12px', padding: '8px 12px', background: '#fef3c7', border: '1px solid #fde68a', borderRadius: '8px', fontSize: '12px', color: '#92400e' }}>
+                      ℹ️ Structure ID #{newContract.structureId} entered. It will be verified against the salary rules engine upon saving.
+                    </div>
+                  ) : null}
+                </div>
+
+                {/* Modal Footer Actions */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px', borderTop: '1px solid #e2e8f0', paddingTop: '16px' }}>
+                  <button type="button" className="btn-secondary" onClick={() => setShowModal(false)} disabled={saving} style={{ fontSize: '13px' }}>
+                    Cancel
+                  </button>
+                  <button type="submit" className="btn-primary" disabled={saving} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}>
+                    {saving ? (
+                      <>
+                        <div style={{ width: '14px', height: '14px', border: '2px solid rgba(255,255,255,0.4)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                        Saving to Database...
+                      </>
+                    ) : (
+                      'Generate Contract'
+                    )}
+                  </button>
+                </div>
+              </form>
             </div>
-
-            {createError && (
-              <div style={{ padding: '10px 12px', background: '#fff2f2', border: '1px solid #fca5a5', borderRadius: '6px', color: '#b91c1c', fontSize: '12px', marginBottom: '14px', lineHeight: 1.4 }}>
-                <strong>Error: </strong>{createError}
-              </div>
-            )}
-
-            <form onSubmit={handleCreate} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px', color: 'var(--text-primary)' }}>Select Employee *</label>
-                <EntityCombobox
-                  value={newContract.employeeId}
-                  onChange={(id) => setNewContract({ ...newContract, employeeId: id ?? '' })}
-                  options={employees.map(emp => ({
-                    id: emp.id,
-                    label: `${emp.first_name} ${emp.last_name}`,
-                    sublabel: `${emp.employee_code} · ${emp.job_position_title || 'Staff'}`
-                  }))}
-                  placeholder="Search employee by name, code, or ID…"
-                  required
-                />
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px', color: 'var(--text-primary)' }}>Contract Number *</label>
-                  <input
-                    type="text"
-                    required
-                    className="form-input"
-                    value={newContract.contractNumber}
-                    onChange={e => setNewContract({ ...newContract, contractNumber: e.target.value.toUpperCase() })}
-                    placeholder="e.g. CNT-2026-0045"
-                    style={{ width: '100%', height: '38px', borderRadius: '8px', padding: '0 10px', boxSizing: 'border-box' }}
-                  />
-                </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px', color: 'var(--text-primary)' }}>Status *</label>
-                  <select
-                    className="control-select"
-                    style={{ width: '100%', height: '38px', borderRadius: '8px' }}
-                    value={newContract.status}
-                    onChange={e => setNewContract({ ...newContract, status: e.target.value })}
-                  >
-                    <option value="DRAFT">DRAFT (Pending Activation)</option>
-                    <option value="RUNNING">RUNNING (Active Immediately)</option>
-                  </select>
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px', color: 'var(--text-primary)' }}>Start Date *</label>
-                  <input
-                    type="date"
-                    required
-                    className="form-input"
-                    value={newContract.startDate}
-                    onChange={e => setNewContract({ ...newContract, startDate: e.target.value })}
-                    style={{ width: '100%', height: '38px', borderRadius: '8px', padding: '0 10px', boxSizing: 'border-box' }}
-                  />
-                </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px', color: 'var(--text-primary)' }}>End Date (Optional)</label>
-                  <input
-                    type="date"
-                    className="form-input"
-                    value={newContract.endDate}
-                    onChange={e => setNewContract({ ...newContract, endDate: e.target.value })}
-                    placeholder="Permanent if empty"
-                    style={{ width: '100%', height: '38px', borderRadius: '8px', padding: '0 10px', boxSizing: 'border-box' }}
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px', color: 'var(--text-primary)' }}>Monthly Wage (₹) *</label>
-                <input 
-                  type="number" 
-                  required 
-                  min="1"
-                  className="form-input" 
-                  value={newContract.wage} 
-                  onChange={e => setNewContract({ ...newContract, wage: Number(e.target.value) })} 
-                  style={{ width: '100%' }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px', color: 'var(--text-primary)' }}>Salary Structure</label>
-                <EntityCombobox
-                  value={newContract.structureId}
-                  onChange={(id) => setNewContract({ ...newContract, structureId: id ?? '' })}
-                  options={structures.map(s => ({
-                    id: s.id,
-                    label: s.name,
-                    sublabel: s.code
-                  }))}
-                  placeholder="Select salary structure…"
-                />
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '12px', borderTop: '1px solid var(--border-structural)', paddingTop: '12px' }}>
-                <button type="button" className="btn-secondary" onClick={() => setShowModal(false)} disabled={saving}>
-                  Cancel
-                </button>
-                <button type="submit" className="btn-primary" disabled={saving} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  {saving ? (
-                    <>
-                      <div style={{ width: '14px', height: '14px', border: '2px solid rgba(255,255,255,0.4)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-                      Generating...
-                    </>
-                  ) : (
-                    'Generate Contract'
-                  )}
-                </button>
-              </div>
-            </form>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </>
   );
 };

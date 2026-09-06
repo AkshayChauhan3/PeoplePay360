@@ -51,6 +51,7 @@ async def create_job_position(db: AsyncSession, data: JobPositionCreate) -> JobP
         name=data.name,
         code=data.code,
         description=data.description,
+        department_id=data.department_id,
         is_active=True,
     )
     db.add(pos)
@@ -91,6 +92,8 @@ async def update_job_position(db: AsyncSession, pos_id: int, data: JobPositionUp
         pos.description = data.description
     if data.is_active is not None:
         pos.is_active = data.is_active
+    if data.department_id is not None or "department_id" in data.model_fields_set:
+        pos.department_id = data.department_id
 
     await db.flush()
     await db.commit()

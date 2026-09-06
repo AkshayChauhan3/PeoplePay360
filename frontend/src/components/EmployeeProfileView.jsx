@@ -17,6 +17,115 @@ const EmployeeProfileView = ({ employeeId, currentUser, onNavigate }) => {
   const [punching, setPunching] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
 
+  // ── Edit Employee ────────────────────────────────────────────────────────────
+  const CAN_EDIT_ROLES = ['ADMIN', 'HR_MANAGER', 'HR_PAYROLL_MANAGER', 'HR_PAYROLL_USER'];
+  const canEdit = CAN_EDIT_ROLES.includes((currentUser?.role || '').toUpperCase());
+
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editForm, setEditForm] = useState({});
+  const [masterDepts, setMasterDepts] = useState([]);
+  const [masterPositions, setMasterPositions] = useState([]);
+  const [masterSchedules, setMasterSchedules] = useState([]);
+  const [masterManagers, setMasterManagers] = useState([]);
+  const [masterDataLoaded, setMasterDataLoaded] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [editError, setEditError] = useState('');
+
+  const loadMasterData = async () => {
+    if (masterDataLoaded) return;
+    try {
+      const [dRes, pRes, sRes, mRes] = await Promise.allSettled([
+        apiService.getDepartments(),
+        apiService.getJobPositions(),
+        apiService.getSchedules(),
+        apiService.getEmployees({ limit: 500 }),
+      ]);
+      if (dRes.status === 'fulfilled') {
+        const d = Array.isArray(dRes.value) ? dRes.value : (dRes.value?.items || []);
+        setMasterDepts(d);
+      }
+      if (pRes.status === 'fulfilled') {
+        const p = Array.isArray(pRes.value) ? pRes.value : (pRes.value?.items || []);
+        setMasterPositions(p);
+      }
+      if (sRes.status === 'fulfilled') {
+        const s = Array.isArray(sRes.value) ? sRes.value : (sRes.value?.items || []);
+        setMasterSchedules(s);
+      }
+      if (mRes.status === 'fulfilled') {
+        const m = mRes.value?.items || (Array.isArray(mRes.value) ? mRes.value : []);
+        setMasterManagers(m);
+      }
+      setMasterDataLoaded(true);
+    } catch (err) {
+      console.error('Failed to load master data for edit form', err);
+    }
+  };
+
+  const openEditModal = async (emp) => {
+    await loadMasterData();
+    setEditForm({
+      first_name: emp.first_name || '',
+      last_name: emp.last_name || '',
+      email: emp.email || '',
+      phone: emp.phone || '',
+      employee_code: emp.employee_code || '',
+      joining_date: emp.joining_date ? String(emp.joining_date).slice(0, 10) : '',
+      status: emp.status || 'ACTIVE',
+      department_id: emp.department_id ? String(emp.department_id) : '',
+      job_position_id: emp.job_position_id ? String(emp.job_position_id) : '',
+      manager_id: emp.manager_id ? String(emp.manager_id) : '',
+      working_schedule_id: emp.working_schedule_id ? String(emp.working_schedule_id) : '',
+      bank_name: emp.bank_name || '',
+      bank_account_number: emp.bank_account_number || '',
+      ifsc_code: emp.ifsc_code || '',
+      pan_number: emp.pan_number || '',
+      account_holder_name: emp.account_holder_name || '',
+    });
+    setEditError('');
+    setShowEditModal(true);
+  };
+
+  const handleEditField = (field, value) => {
+    setEditForm(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleSaveEmployee = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    setEditError('');
+    try {
+      const payload = {};
+      if (editForm.first_name.trim()) payload.first_name = editForm.first_name.trim();
+      if (editForm.last_name.trim()) payload.last_name = editForm.last_name.trim();
+      if (editForm.email.trim()) payload.email = editForm.email.trim();
+      if (editForm.phone !== undefined) payload.phone = editForm.phone.trim() || null;
+      if (editForm.employee_code.trim()) payload.employee_code = editForm.employee_code.trim();
+      if (editForm.joining_date) payload.joining_date = editForm.joining_date;
+      if (editForm.status) payload.status = editForm.status;
+      if (editForm.department_id) payload.department_id = Number(editForm.department_id);
+      if (editForm.job_position_id) payload.job_position_id = Number(editForm.job_position_id);
+      payload.manager_id = editForm.manager_id ? Number(editForm.manager_id) : null;
+      payload.working_schedule_id = editForm.working_schedule_id ? Number(editForm.working_schedule_id) : null;
+      if (editForm.bank_name !== undefined) payload.bank_name = editForm.bank_name.trim() || null;
+      if (editForm.bank_account_number !== undefined) payload.bank_account_number = editForm.bank_account_number.trim() || null;
+      if (editForm.ifsc_code !== undefined) payload.ifsc_code = editForm.ifsc_code.trim() || null;
+      if (editForm.pan_number !== undefined) payload.pan_number = editForm.pan_number.trim() || null;
+      if (editForm.account_holder_name !== undefined) payload.account_holder_name = editForm.account_holder_name.trim() || null;
+
+      await apiService.updateEmployee(employee.id, payload);
+      setShowEditModal(false);
+      showToast(`✅ Employee ${editForm.first_name} ${editForm.last_name} updated successfully!`);
+      await fetchProfileData(); // re-fetch live data
+    } catch (err) {
+      console.error('Failed to update employee:', err);
+      setEditError(err.message || 'Failed to save changes. Please check all fields and try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
+  // ────────────────────────────────────────────────────────────────────────────
+
   const showToast = (msg) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(''), 4000);
@@ -170,6 +279,15 @@ const EmployeeProfileView = ({ employeeId, currentUser, onNavigate }) => {
         </div>
 
         <div style={{ display: 'flex', gap: '8px' }}>
+          {canEdit && (
+            <button
+              className="btn-primary"
+              onClick={() => openEditModal(employee)}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12.5px' }}
+            >
+              <span>✏️</span> Edit Employee
+            </button>
+          )}
           <button 
             className="btn-secondary" 
             onClick={() => setShowQuickPunchModal(true)}
@@ -720,6 +838,278 @@ const EmployeeProfileView = ({ employeeId, currentUser, onNavigate }) => {
                 </tbody>
               </table>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Edit Employee Modal ──────────────────────────────────────────────── */}
+      {showEditModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', zIndex: 1100, padding: '24px 16px', overflowY: 'auto' }}>
+          <div style={{ background: '#fff', borderRadius: '14px', width: '720px', maxWidth: '100%', padding: '28px', boxShadow: '0 24px 40px rgba(0,0,0,0.18)', marginBottom: '24px' }}>
+            {/* Modal Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', paddingBottom: '14px', borderBottom: '1px solid #e2e8f0' }}>
+              <div>
+                <h2 style={{ margin: 0, fontSize: '18px', fontWeight: 800, color: 'var(--primary)' }}>✏️ Edit Employee</h2>
+                <p style={{ margin: '3px 0 0 0', fontSize: '12.5px', color: 'var(--text-secondary)' }}>
+                  Editing: <strong>{employee?.first_name} {employee?.last_name}</strong> · {employee?.employee_code} · Changes sync live to database
+                </p>
+              </div>
+              <button
+                onClick={() => setShowEditModal(false)}
+                style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '20px', color: 'var(--text-secondary)', lineHeight: 1 }}
+              >✕</button>
+            </div>
+
+            <form onSubmit={handleSaveEmployee}>
+              {/* Error banner */}
+              {editError && (
+                <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', color: '#b91c1c', padding: '10px 14px', borderRadius: '8px', fontSize: '13px', marginBottom: '16px', fontWeight: 600 }}>
+                  ⚠️ {editError}
+                </div>
+              )}
+
+              {/* Section: Personal Info */}
+              <div style={{ marginBottom: '20px' }}>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>👤</span> Personal Information
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '5px', color: 'var(--text-primary)' }}>First Name *</label>
+                    <input
+                      type="text" required className="form-input"
+                      value={editForm.first_name || ''}
+                      onChange={e => handleEditField('first_name', e.target.value)}
+                      style={{ width: '100%', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '5px', color: 'var(--text-primary)' }}>Last Name *</label>
+                    <input
+                      type="text" required className="form-input"
+                      value={editForm.last_name || ''}
+                      onChange={e => handleEditField('last_name', e.target.value)}
+                      style={{ width: '100%', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '5px', color: 'var(--text-primary)' }}>Work Email *</label>
+                    <input
+                      type="email" required className="form-input"
+                      value={editForm.email || ''}
+                      onChange={e => handleEditField('email', e.target.value)}
+                      style={{ width: '100%', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '5px', color: 'var(--text-primary)' }}>Phone</label>
+                    <input
+                      type="text" className="form-input"
+                      value={editForm.phone || ''}
+                      onChange={e => handleEditField('phone', e.target.value)}
+                      placeholder="+91 9876543210"
+                      style={{ width: '100%', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Section: Employment Info */}
+              <div style={{ marginBottom: '20px' }}>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>💼</span> Employment Details
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '5px', color: 'var(--text-primary)' }}>Employee Code *</label>
+                    <input
+                      type="text" required className="form-input"
+                      value={editForm.employee_code || ''}
+                      onChange={e => handleEditField('employee_code', e.target.value)}
+                      style={{ width: '100%', boxSizing: 'border-box', fontFamily: 'monospace' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '5px', color: 'var(--text-primary)' }}>Joining Date</label>
+                    <input
+                      type="date" className="form-input"
+                      value={editForm.joining_date || ''}
+                      onChange={e => handleEditField('joining_date', e.target.value)}
+                      style={{ width: '100%', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '5px', color: 'var(--text-primary)' }}>Status</label>
+                    <select
+                      className="form-input"
+                      value={editForm.status || 'ACTIVE'}
+                      onChange={e => handleEditField('status', e.target.value)}
+                      style={{ width: '100%', boxSizing: 'border-box' }}
+                    >
+                      <option value="ACTIVE">Active</option>
+                      <option value="ON_LEAVE">On Leave</option>
+                      <option value="TERMINATED">Terminated</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section: Organisation */}
+              <div style={{ marginBottom: '20px' }}>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>🏢</span> Organisation & Reporting
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '5px', color: 'var(--text-primary)' }}>Department</label>
+                    <select
+                      className="form-input"
+                      value={editForm.department_id || ''}
+                      onChange={e => handleEditField('department_id', e.target.value)}
+                      style={{ width: '100%', boxSizing: 'border-box' }}
+                    >
+                      <option value="">— Select Department —</option>
+                      {masterDepts.map(d => (
+                        <option key={d.id} value={String(d.id)}>{d.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '5px', color: 'var(--text-primary)' }}>Job Position</label>
+                    <select
+                      className="form-input"
+                      value={editForm.job_position_id || ''}
+                      onChange={e => handleEditField('job_position_id', e.target.value)}
+                      style={{ width: '100%', boxSizing: 'border-box' }}
+                    >
+                      <option value="">— Select Position —</option>
+                      {masterPositions.map(p => (
+                        <option key={p.id} value={String(p.id)}>{p.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '5px', color: 'var(--text-primary)' }}>Reporting Manager</label>
+                    <select
+                      className="form-input"
+                      value={editForm.manager_id || ''}
+                      onChange={e => handleEditField('manager_id', e.target.value)}
+                      style={{ width: '100%', boxSizing: 'border-box' }}
+                    >
+                      <option value="">— No Manager (Direct Report) —</option>
+                      {masterManagers
+                        .filter(m => String(m.id) !== String(employee?.id))
+                        .map(m => (
+                          <option key={m.id} value={String(m.id)}>
+                            {m.full_name || `${m.first_name} ${m.last_name}`} ({m.employee_code})
+                          </option>
+                        ))
+                      }
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '5px', color: 'var(--text-primary)' }}>Working Schedule</label>
+                    <select
+                      className="form-input"
+                      value={editForm.working_schedule_id || ''}
+                      onChange={e => handleEditField('working_schedule_id', e.target.value)}
+                      style={{ width: '100%', boxSizing: 'border-box' }}
+                    >
+                      <option value="">— Default Schedule —</option>
+                      {masterSchedules.map(s => (
+                        <option key={s.id} value={String(s.id)}>{s.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section: Banking */}
+              <div style={{ marginBottom: '24px' }}>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span>💳</span> Payroll & Bank Details
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '5px', color: 'var(--text-primary)' }}>Account Holder Name</label>
+                    <input
+                      type="text" className="form-input"
+                      value={editForm.account_holder_name || ''}
+                      onChange={e => handleEditField('account_holder_name', e.target.value)}
+                      style={{ width: '100%', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '5px', color: 'var(--text-primary)' }}>Bank Name</label>
+                    <input
+                      type="text" className="form-input"
+                      value={editForm.bank_name || ''}
+                      onChange={e => handleEditField('bank_name', e.target.value)}
+                      placeholder="e.g. HDFC Bank"
+                      style={{ width: '100%', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '5px', color: 'var(--text-primary)' }}>Account Number</label>
+                    <input
+                      type="text" className="form-input"
+                      value={editForm.bank_account_number || ''}
+                      onChange={e => handleEditField('bank_account_number', e.target.value)}
+                      style={{ width: '100%', boxSizing: 'border-box', fontFamily: 'monospace' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '5px', color: 'var(--text-primary)' }}>IFSC Code</label>
+                    <input
+                      type="text" className="form-input"
+                      value={editForm.ifsc_code || ''}
+                      onChange={e => handleEditField('ifsc_code', e.target.value.toUpperCase())}
+                      placeholder="e.g. HDFC0001234"
+                      style={{ width: '100%', boxSizing: 'border-box', fontFamily: 'monospace', textTransform: 'uppercase' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '5px', color: 'var(--text-primary)' }}>PAN Number</label>
+                    <input
+                      type="text" className="form-input"
+                      value={editForm.pan_number || ''}
+                      onChange={e => handleEditField('pan_number', e.target.value.toUpperCase())}
+                      placeholder="e.g. ABCDE1234F"
+                      maxLength={10}
+                      style={{ width: '100%', boxSizing: 'border-box', fontFamily: 'monospace', textTransform: 'uppercase' }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer Actions */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', borderTop: '1px solid #e2e8f0', paddingTop: '16px' }}>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setShowEditModal(false)}
+                  disabled={saving}
+                  style={{ fontSize: '13px' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn-primary"
+                  disabled={saving}
+                  style={{ fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                >
+                  {saving ? (
+                    <>
+                      <div style={{ width: '14px', height: '14px', border: '2px solid rgba(255,255,255,0.4)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+                      Saving to Database…
+                    </>
+                  ) : (
+                    <>💾 Save Changes</>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

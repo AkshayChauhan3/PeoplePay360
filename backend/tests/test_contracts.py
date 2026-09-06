@@ -53,7 +53,7 @@ async def test_create_contract_full_fields(
 ) -> None:
     payload = _sample_contract_payload(
         employee_id=sample_employee["id"],
-        contract_number="cnt-2026-0001",
+        contract_number="cnt-full-0001",
         start_date="2026-01-01",
         end_date="2026-12-31",
         wage=75000.50,
@@ -64,7 +64,7 @@ async def test_create_contract_full_fields(
     res = await async_client.post("/api/v1/contracts", json=payload, headers=hr_manager_auth_headers)
     assert res.status_code == 201
     data = res.json()
-    assert data["contract_number"] == "CNT-2026-0001"  # Normalized uppercase
+    assert data["contract_number"] == "CNT-FULL-0001"  # Normalized uppercase
     assert data["employee_id"] == sample_employee["id"]
     assert float(data["wage"]) == 75000.50
     assert data["status"] == "DRAFT"

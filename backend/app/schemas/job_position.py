@@ -9,6 +9,7 @@ class JobPositionCreate(BaseModel):
     name: str = Field(..., min_length=2, max_length=150, description="Job position name")
     code: str = Field(..., min_length=2, max_length=50, description="Unique job position code")
     description: str | None = Field(default=None, max_length=255, description="Position description")
+    department_id: int | None = Field(default=None, description="Optional owning department ID")
 
     @field_validator("code")
     @classmethod
@@ -27,6 +28,7 @@ class JobPositionUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=2, max_length=150)
     code: str | None = Field(default=None, min_length=2, max_length=50)
     description: str | None = Field(default=None, max_length=255)
+    department_id: int | None = Field(default=None, description="Owning department ID (set null to unassign)")
     is_active: bool | None = Field(default=None)
 
     @field_validator("code")
@@ -49,6 +51,7 @@ class JobPositionResponse(BaseModel):
     name: str
     code: str
     description: str | None
+    department_id: int | None = None
     is_active: bool
     created_at: datetime
     updated_at: datetime

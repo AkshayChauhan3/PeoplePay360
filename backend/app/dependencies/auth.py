@@ -162,11 +162,13 @@ def require_payroll_read() -> Callable:
     """
     Allows read-only access to salary structures and rules:
     - ADMIN
+    - HR_MANAGER
     - HR_PAYROLL_MANAGER
     - HR_PAYROLL_USER
     """
     return require_role(
         UserRole.ADMIN,
+        UserRole.HR_MANAGER,
         UserRole.HR_PAYROLL_MANAGER,
         UserRole.HR_PAYROLL_USER,
     )

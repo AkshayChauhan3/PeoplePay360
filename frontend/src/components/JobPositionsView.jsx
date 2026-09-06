@@ -223,12 +223,14 @@ function NewPositionModal({ departments, editPos, onClose, onSaved }) {
     try {
       const desc = `${form.level} | ${form.type} | ${form.location}`;
       const codeVal = form.code.trim().toUpperCase();
+      const deptIdPayload = form.department_id ? Number(form.department_id) : null;
       if (isEditing && editPos) {
         if (editPos.rawId) {
           await apiService.updateJobPosition(editPos.rawId, {
             name: form.name.trim(),
             code: codeVal,
             description: desc,
+            department_id: deptIdPayload,
           });
         }
       } else {
@@ -236,6 +238,7 @@ function NewPositionModal({ departments, editPos, onClose, onSaved }) {
           name: form.name.trim(),
           code: codeVal,
           description: desc,
+          department_id: deptIdPayload,
         });
       }
       onSaved();

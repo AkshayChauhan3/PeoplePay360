@@ -1,12 +1,13 @@
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, Integer, String, text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
 if TYPE_CHECKING:
+    from app.models.department import Department
     from app.models.employee import Employee
 
 
@@ -56,6 +57,15 @@ class JobPosition(Base):
         nullable=True,
     )
 
+    # Optional link to a department (nullable for backward compatibility)
+    department_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("departments.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Optional owning department for this job position",
+    )
+
     # Soft deactivation flag. Prevents physical deletion from breaking employee records.
     is_active: Mapped[bool] = mapped_column(
         Boolean,
@@ -83,6 +93,13 @@ class JobPosition(Base):
     employees: Mapped[list["Employee"]] = relationship(
         "Employee",
         back_populates="job_position",
+    )
+
+    # Many-to-one: owning department (optional)
+    department: Mapped["Department | None"] = relationship(
+        "Department",
+        foreign_keys=[department_id],
+        lazy="select",
     )
 
     def __repr__(self) -> str:
