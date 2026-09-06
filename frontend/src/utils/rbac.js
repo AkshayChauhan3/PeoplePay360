@@ -22,6 +22,42 @@ export const ROLE_BADGE_COLORS = {
   EMPLOYEE: { bg: 'rgba(11, 122, 66, 0.12)', text: '#0b7a42', border: '#0b7a42' },
 };
 
+const HR_MANAGER_PERMISSIONS = {
+  canManageUsers: false,
+  canCreateEmployees: true,
+  canEditContracts: true,
+  canApproveLeave: true,
+  canProcessPayroll: false,
+  canEditSalaryRules: false,
+  canEditSettings: false,
+  allowedViews: [
+    'dashboard',
+    'directory', 'employee_profile', 'departments', 'job_positions', 'schedules',
+    'all_contracts', 'active_contracts', 'contract_detail',
+    'attendance_records', 'monthly_overview',
+    'time_off_requests', 'leave_allocations', 'time_off_types',
+  ],
+};
+
+const HR_PAYROLL_USER_PERMISSIONS = {
+  ...HR_MANAGER_PERMISSIONS,
+  canProcessPayroll: false,
+  allowedViews: Array.from(new Set([
+    ...HR_MANAGER_PERMISSIONS.allowedViews,
+    'payruns', 'payslips', 'salary_structures',
+  ])),
+};
+
+const HR_PAYROLL_MANAGER_PERMISSIONS = {
+  ...HR_PAYROLL_USER_PERMISSIONS,
+  canProcessPayroll: true,
+  canEditSalaryRules: true,
+  allowedViews: Array.from(new Set([
+    ...HR_PAYROLL_USER_PERMISSIONS.allowedViews,
+    'salary_rules',
+  ])),
+};
+
 export const ROLE_PERMISSIONS = {
   ADMIN: {
     canManageUsers: true,
@@ -33,7 +69,7 @@ export const ROLE_PERMISSIONS = {
     canEditSettings: true,
     allowedViews: [
       'dashboard',
-      'directory', 'employee_profile', 'departments', 'job_positions',
+      'directory', 'employee_profile', 'departments', 'job_positions', 'schedules',
       'all_contracts', 'active_contracts', 'contract_detail',
       'attendance_records', 'monthly_overview',
       'time_off_requests', 'leave_allocations', 'time_off_types',
@@ -41,54 +77,9 @@ export const ROLE_PERMISSIONS = {
       'settings',
     ],
   },
-  HR_MANAGER: {
-    canManageUsers: false,
-    canCreateEmployees: true,
-    canEditContracts: true,
-    canApproveLeave: true,
-    canProcessPayroll: false,
-    canEditSalaryRules: false,
-    canEditSettings: false,
-    allowedViews: [
-      'dashboard',
-      'directory', 'employee_profile', 'departments', 'job_positions',
-      'all_contracts', 'active_contracts', 'contract_detail',
-      'attendance_records', 'monthly_overview',
-      'time_off_requests', 'leave_allocations', 'time_off_types',
-    ],
-  },
-  HR_PAYROLL_MANAGER: {
-    canManageUsers: false,
-    canCreateEmployees: false,
-    canEditContracts: true,
-    canApproveLeave: false,
-    canProcessPayroll: true,
-    canEditSalaryRules: true,
-    canEditSettings: false,
-    allowedViews: [
-      'dashboard',
-      'directory', 'employee_profile',
-      'all_contracts', 'active_contracts', 'contract_detail',
-      'attendance_records', 'monthly_overview',
-      'payruns', 'payslips', 'salary_structures', 'salary_rules',
-    ],
-  },
-  HR_PAYROLL_USER: {
-    canManageUsers: false,
-    canCreateEmployees: false,
-    canEditContracts: false,
-    canApproveLeave: false,
-    canProcessPayroll: false,
-    canEditSalaryRules: false,
-    canEditSettings: false,
-    allowedViews: [
-      'dashboard',
-      'directory', 'employee_profile',
-      'all_contracts',
-      'attendance_records',
-      'payruns', 'payslips', 'salary_structures',
-    ],
-  },
+  HR_MANAGER: HR_MANAGER_PERMISSIONS,
+  HR_PAYROLL_MANAGER: HR_PAYROLL_MANAGER_PERMISSIONS,
+  HR_PAYROLL_USER: HR_PAYROLL_USER_PERMISSIONS,
   EMPLOYEE: {
     canManageUsers: false,
     canCreateEmployees: false,
@@ -99,6 +90,7 @@ export const ROLE_PERMISSIONS = {
     canEditSettings: false,
     allowedViews: [
       'dashboard',
+      'employee_profile',
       'attendance_records',
       'time_off_requests',
       'payslips',

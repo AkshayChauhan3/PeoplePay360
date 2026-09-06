@@ -3,7 +3,6 @@ from decimal import Decimal
 
 from sqlalchemy import (
     Boolean,
-    CheckConstraint,
     DateTime,
     ForeignKey,
     Integer,
@@ -19,15 +18,16 @@ from app.db.base import Base
 
 
 def _utcnow() -> datetime:
+    """Helper returning current timestamp in UTC timezone."""
     return datetime.now(timezone.utc)
 
 
-class Schedule(Base):
+class WorkingSchedule(Base):
     """
-    Working Schedule container.
+    Working Schedule Entity.
 
-    Represents an operational work schedule (e.g. 40h/week, 5 days/week).
-    Total weekly hours are derived from child ScheduleLines.
+    Defines standard organizational or employee-specific work calendars,
+    specifying expected working days and standard shifts across the week.
     """
 
     __tablename__ = "working_schedules"
@@ -40,79 +40,81 @@ class Schedule(Base):
 
     name: Mapped[str] = mapped_column(
         String(100),
-        nullable=False,
         unique=True,
         index=True,
+        nullable=False,
     )
 
     calendar_type: Mapped[str] = mapped_column(
         String(50),
-        nullable=False,
         default="STANDARD",
-        server_default=text("'STANDARD'"),
+        server_default="STANDARD",
+        nullable=False,
     )
 
     hours_per_week: Mapped[Decimal] = mapped_column(
         Numeric(5, 2),
-        nullable=False,
         default=Decimal("40.00"),
-        server_default=text("40.00"),
+        server_default="40.00",
+        nullable=False,
     )
 
     days_per_week: Mapped[int] = mapped_column(
         Integer,
-        nullable=False,
         default=5,
-        server_default=text("5"),
+        server_default="5",
+        nullable=False,
     )
 
     is_active: Mapped[bool] = mapped_column(
         Boolean,
-        nullable=False,
         default=True,
         server_default=text("true"),
+        nullable=False,
     )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        nullable=False,
         default=_utcnow,
         server_default=text("now()"),
+        nullable=False,
     )
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        nullable=False,
         default=_utcnow,
         onupdate=_utcnow,
         server_default=text("now()"),
+        nullable=False,
     )
 
-    lines: Mapped[list["ScheduleLine"]] = relationship(
-        "ScheduleLine",
+    # 1:N relationship with day lines
+    lines: Mapped[list["WorkingScheduleDay"]] = relationship(
+        "WorkingScheduleDay",
         back_populates="schedule",
         cascade="all, delete-orphan",
         lazy="selectin",
-        order_by="ScheduleLine.day_of_week",
+        order_by="WorkingScheduleDay.day_of_week",
     )
 
     def __repr__(self) -> str:
-        return f"<Schedule id={self.id} name={self.name!r} hours_per_week={self.hours_per_week}>"
+        return f"<WorkingSchedule id={self.id} name={self.name!r} hours={self.hours_per_week}>"
 
 
-class ScheduleLine(Base):
+class WorkingScheduleDay(Base):
     """
-    Day-by-day line item for a Working Schedule.
+    Daily working line within a Working Schedule.
 
-    day_of_week: 0=Monday, 1=Tuesday, 2=Wednesday, 3=Thursday,
-                 4=Friday, 5=Saturday, 6=Sunday.
+    Maps day of week (0 = Monday ... 6 = Sunday) to shift timings and breaks.
     """
 
     __tablename__ = "working_schedule_days"
     __table_args__ = (
-        UniqueConstraint("schedule_id", "day_of_week", name="uq_working_schedule_days_schedule_day"),
-        CheckConstraint("day_of_week BETWEEN 0 AND 6", name="ck_schedule_lines_day_of_week"),
-        CheckConstraint("work_hours >= 0", name="ck_schedule_hours_positive"),
+        UniqueConstraint(
+            "schedule_id",
+            "day_of_week",
+            name="uq_working_schedule_days_schedule_day",
+        ),
     )
 
     id: Mapped[int] = mapped_column(
@@ -124,10 +126,11 @@ class ScheduleLine(Base):
     schedule_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("working_schedules.id", ondelete="CASCADE"),
-        nullable=False,
         index=True,
+        nullable=False,
     )
 
+    # 0 = Monday, 1 = Tuesday, 2 = Wednesday, 3 = Thursday, 4 = Friday, 5 = Saturday, 6 = Sunday
     day_of_week: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
@@ -145,30 +148,23 @@ class ScheduleLine(Base):
 
     break_minutes: Mapped[int] = mapped_column(
         Integer,
-        nullable=False,
         default=60,
-        server_default=text("60"),
+        server_default="60",
+        nullable=False,
     )
 
     work_hours: Mapped[Decimal] = mapped_column(
         Numeric(4, 2),
-        nullable=False,
         default=Decimal("8.00"),
-        server_default=text("8.00"),
+        server_default="8.00",
+        nullable=False,
     )
 
-    schedule: Mapped["Schedule"] = relationship(
-        "Schedule",
+    schedule: Mapped["WorkingSchedule"] = relationship(
+        "WorkingSchedule",
         back_populates="lines",
     )
 
     def __repr__(self) -> str:
-        return (
-            f"<ScheduleLine id={self.id} day={self.day_of_week} "
-            f"{self.start_time}-{self.end_time} work_hours={self.work_hours}>"
-        )
+        return f"<WorkingScheduleDay schedule_id={self.schedule_id} day={self.day_of_week} {self.start_time}-{self.end_time}>"
 
-
-# Backward compatibility aliases
-WorkingSchedule = Schedule
-WorkingScheduleDay = ScheduleLine

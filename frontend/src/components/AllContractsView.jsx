@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { apiService } from '../services/apiService';
+import EntityCombobox from './EntityCombobox';
 
 const normalizeContract = (c, i) => {
   const wageNum = typeof c.wage === 'number' ? c.wage : parseFloat(c.wage) || 0;
@@ -22,6 +23,7 @@ const normalizeContract = (c, i) => {
   return {
     id: c.contract_number || c.contract_reference || c.id || `CNT-${1000 + i}`,
     rawId: c.id,
+    employeeId: c.employee_id || c.employee?.id ? Number(c.employee_id || c.employee?.id) : null,
     employee: empName || 'Employee',
     empId: c.employee?.employee_code || c.employee_id || c.empId || `EMP-${1000 + i}`,
     role: c.job_position?.name || c.job_title || c.role || 'Specialist',
@@ -49,7 +51,7 @@ const formatCurrencyShort = (amount) => {
   return `₹${amount.toLocaleString('en-IN')}`;
 };
 
-const AllContractsView = ({ onNavigate }) => {
+const AllContractsView = ({ onNavigate, filterEmployeeId, onClearFilter }) => {
   const [contracts, setContracts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -197,7 +199,11 @@ const AllContractsView = ({ onNavigate }) => {
   const totalWageCommitment = runningContracts.reduce((acc, c) => acc + (c.rawWage || 0), 0);
   const currentCycle = `#${new Date().toLocaleDateString('en-US', { month: '2-digit', year: '2-digit' })}`;
 
-  const filteredContracts = contracts.filter(c => {
+  const baseContracts = filterEmployeeId
+    ? contracts.filter(c => c.employeeId === Number(filterEmployeeId))
+    : contracts;
+
+  const filteredContracts = baseContracts.filter(c => {
     const matchesSearch = c.employee.toLowerCase().includes(search.toLowerCase()) ||
       c.id.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = statusFilter === 'ALL' 
@@ -207,6 +213,8 @@ const AllContractsView = ({ onNavigate }) => {
         : c.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
+
+  const filteredEmp = filterEmployeeId ? employees.find(e => e.id === Number(filterEmployeeId)) : null;
 
   return (
     <>
@@ -227,6 +235,39 @@ const AllContractsView = ({ onNavigate }) => {
           </button>
         </div>
       </div>
+
+      {filterEmployeeId && (
+        <div style={{ 
+          background: '#eff6ff', 
+          border: '1px solid #bfdbfe', 
+          borderRadius: '8px', 
+          padding: '10px 16px', 
+          marginBottom: '16px', 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'space-between' 
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#1e40af' }}>
+            <span style={{ fontSize: '16px' }}>📄</span>
+            <span>
+              Showing contracts filtered for{' '}
+              <strong>{filteredEmp ? `${filteredEmp.first_name} ${filteredEmp.last_name} (${filteredEmp.employee_code})` : `Employee #${filterEmployeeId}`}</strong>
+            </span>
+            <span style={{ background: '#dbeafe', padding: '2px 8px', borderRadius: '12px', fontSize: '12px', fontWeight: 600 }}>
+              {baseContracts.length} contracts found
+            </span>
+          </div>
+          {onClearFilter && (
+            <button 
+              onClick={onClearFilter} 
+              className="btn-secondary" 
+              style={{ fontSize: '12px', padding: '4px 10px', height: 'auto', background: 'white' }}
+            >
+              ✕ Clear Filter (Show All)
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="kpi-grid mb-6">
         <div className="kpi-card relative">
@@ -436,20 +477,17 @@ const AllContractsView = ({ onNavigate }) => {
             <form onSubmit={handleCreate} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px', color: 'var(--text-primary)' }}>Select Employee *</label>
-                <select
-                  required
-                  className="control-select"
-                  style={{ width: '100%', height: '38px', borderRadius: '8px' }}
+                <EntityCombobox
                   value={newContract.employeeId}
-                  onChange={e => setNewContract({ ...newContract, employeeId: e.target.value })}
-                >
-                  <option value="">-- Choose Employee --</option>
-                  {employees.map(emp => (
-                    <option key={emp.id} value={emp.id}>
-                      {emp.first_name} {emp.last_name} ({emp.employee_code}) · {emp.job_position_title || 'Staff'}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(id) => setNewContract({ ...newContract, employeeId: id ?? '' })}
+                  options={employees.map(emp => ({
+                    id: emp.id,
+                    label: `${emp.first_name} ${emp.last_name}`,
+                    sublabel: `${emp.employee_code} · ${emp.job_position_title || 'Staff'}`
+                  }))}
+                  placeholder="Search employee by name, code, or ID…"
+                  required
+                />
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
@@ -519,19 +557,16 @@ const AllContractsView = ({ onNavigate }) => {
 
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px', color: 'var(--text-primary)' }}>Salary Structure</label>
-                <select 
-                  className="control-select" 
-                  style={{ width: '100%', height: '38px', borderRadius: '8px' }}
-                  value={newContract.structureId} 
-                  onChange={e => setNewContract({ ...newContract, structureId: e.target.value })}
-                >
-                  <option value="">-- Optional / Default Structure --</option>
-                  {structures.map(s => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} ({s.code})
-                    </option>
-                  ))}
-                </select>
+                <EntityCombobox
+                  value={newContract.structureId}
+                  onChange={(id) => setNewContract({ ...newContract, structureId: id ?? '' })}
+                  options={structures.map(s => ({
+                    id: s.id,
+                    label: s.name,
+                    sublabel: s.code
+                  }))}
+                  placeholder="Select salary structure…"
+                />
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '12px', borderTop: '1px solid var(--border-structural)', paddingTop: '12px' }}>

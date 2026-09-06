@@ -51,16 +51,18 @@ async def create_tables() -> AsyncGenerator[None, None]:
     """Create all tables and seed standard roles at the start of the session."""
     from sqlalchemy import text
     async with _test_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-        # Clean any remnant rows from prior manual runs to ensure clean test isolation
-        for t in [
-            "payslip_email_deliveries", "payslip_lines", "payslips", "payruns",
-            "contracts", "time_off_requests", "time_off_allocations",
-            "time_off_types", "attendances", "working_schedule_days",
-            "working_schedules", "users", "employees", "job_positions",
-            "departments", "salary_rules", "salary_structures",
-        ]:
-            await conn.execute(text(f"TRUNCATE TABLE {t} CASCADE;"))
+        # Safety guard: only truncate if database name contains '_test' or explicitly enabled
+        import os
+        db_name = settings.database_url.split("/")[-1].split("?")[0]
+        if "_test" in db_name or os.getenv("ALLOW_DEV_DB_TRUNCATE") == "1":
+            for t in [
+                "payslip_email_deliveries", "payslip_lines", "payslips", "payruns",
+                "contracts", "time_off_requests", "time_off_allocations",
+                "time_off_types", "attendances", "working_schedule_days",
+                "working_schedules", "users", "employees", "job_positions",
+                "departments", "salary_rules", "salary_structures",
+            ]:
+                await conn.execute(text(f"TRUNCATE TABLE {t} CASCADE;"))
 
     # Seed the standard roles, default schedule, and default time-off types so all tests can reference them
     async with _TestSessionLocal() as session:

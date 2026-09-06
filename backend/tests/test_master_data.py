@@ -156,6 +156,91 @@ async def test_department_employee_role_forbidden(
     assert res.status_code == 403
 
 
+async def test_create_department_with_manager_id_success(
+    async_client: AsyncClient,
+    hr_manager_auth_headers: dict[str, str],
+    sample_employee: dict[str, Any],
+) -> None:
+    res = await async_client.post(
+        "/api/v1/departments",
+        json={
+            "name": "Platform Infrastructure",
+            "code": "PLTINFRA",
+            "manager_id": sample_employee["id"],
+        },
+        headers=hr_manager_auth_headers,
+    )
+    assert res.status_code == 201
+    data = res.json()
+    assert data["manager_id"] == sample_employee["id"]
+    assert data["manager"] is not None
+    assert data["manager"]["id"] == sample_employee["id"]
+    assert "employee_code" in data["manager"]
+    assert "full_name" in data["manager"]
+
+
+async def test_create_department_string_manager_id_rejected_with_422(
+    async_client: AsyncClient,
+    hr_manager_auth_headers: dict[str, str],
+) -> None:
+    """String input for manager_id must be strictly rejected with 422."""
+    res = await async_client.post(
+        "/api/v1/departments",
+        json={
+            "name": "Invalid Dept",
+            "code": "INV1",
+            "manager_id": "Rajesh Singhania",
+        },
+        headers=hr_manager_auth_headers,
+    )
+    assert res.status_code == 422
+
+
+async def test_create_department_nonexistent_manager_id_rejected_with_404(
+    async_client: AsyncClient,
+    hr_manager_auth_headers: dict[str, str],
+) -> None:
+    """Non-existent employee integer ID must return 404."""
+    res = await async_client.post(
+        "/api/v1/departments",
+        json={
+            "name": "Ghost Dept",
+            "code": "GHOST",
+            "manager_id": 999999,
+        },
+        headers=hr_manager_auth_headers,
+    )
+    assert res.status_code == 404
+
+
+async def test_update_department_manager_id_lifecycle(
+    async_client: AsyncClient,
+    hr_manager_auth_headers: dict[str, str],
+    sample_department: dict[str, Any],
+    sample_employee: dict[str, Any],
+) -> None:
+    # 1. Assign manager by integer ID
+    res = await async_client.patch(
+        f"/api/v1/departments/{sample_department['id']}",
+        json={"manager_id": sample_employee["id"]},
+        headers=hr_manager_auth_headers,
+    )
+    assert res.status_code == 200
+    assert res.json()["manager_id"] == sample_employee["id"]
+    assert res.json()["manager"]["id"] == sample_employee["id"]
+
+    # 2. Unset manager by passing None / null
+    res_unset = await async_client.patch(
+        f"/api/v1/departments/{sample_department['id']}",
+        json={"manager_id": None},
+        headers=hr_manager_auth_headers,
+    )
+    assert res_unset.status_code == 200
+    assert res_unset.json()["manager_id"] is None
+    assert res_unset.json()["manager"] is None
+
+
+
 # ===========================================================================
 # Job Positions Tests
 # ===========================================================================

@@ -1,5 +1,4 @@
 import enum
-import uuid
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import TYPE_CHECKING
@@ -11,16 +10,17 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     Numeric,
+    String,
     UniqueConstraint,
     text,
 )
-from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.models.contract import Contract
+    from app.models.email_delivery import PayslipEmailDelivery
     from app.models.employee import Employee
     from app.models.payrun import Payrun
     from app.models.payslip_line import PayslipLine
@@ -83,8 +83,8 @@ class Payslip(Base):
         nullable=False,
     )
 
-    employee_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+    employee_id: Mapped[int] = mapped_column(
+        Integer,
         ForeignKey("employees.id", ondelete="RESTRICT"),
         index=True,
         nullable=False,
@@ -152,6 +152,12 @@ class Payslip(Base):
         nullable=False,
     )
 
+    pdf_storage_key: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+        default=None,
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=_utcnow,
@@ -197,6 +203,13 @@ class Payslip(Base):
         cascade="all, delete-orphan",
         lazy="selectin",
         order_by="PayslipLine.sequence",
+    )
+
+    email_deliveries: Mapped[list["PayslipEmailDelivery"]] = relationship(
+        "PayslipEmailDelivery",
+        back_populates="payslip",
+        cascade="all, delete-orphan",
+        lazy="selectin",
     )
 
     def __repr__(self) -> str:

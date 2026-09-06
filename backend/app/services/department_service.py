@@ -12,6 +12,7 @@ Handles all business logic for organizational departments:
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models.department import Department
 from app.models.employee import Employee, EmployeeStatus
@@ -21,6 +22,7 @@ from app.schemas.department import DepartmentCreate, DepartmentUpdate
 async def get_departments(db: AsyncSession, include_inactive: bool = False) -> list[Department]:
     """
     Retrieve all departments ordered by ID.
+    Retrieve all departments ordered by ID with manager and employee count.
 
     Args:
         db: Async database session.
@@ -32,6 +34,13 @@ async def get_departments(db: AsyncSession, include_inactive: bool = False) -> l
     """
     # Build base select query ordered chronologically by primary key
     query = select(Department).order_by(Department.id)
+    query = (
+        select(Department)
+        .options(
+            selectinload(Department.manager).selectinload(Employee.job_position),
+        )
+        .order_by(Department.id)
+    )
 
     # Filter out soft-deactivated departments unless explicitly requested by the caller
     if not include_inactive:
@@ -39,12 +48,27 @@ async def get_departments(db: AsyncSession, include_inactive: bool = False) -> l
 
     # Execute async query and extract scalar models
     result = await db.execute(query)
-    return list(result.scalars().all())
+    depts = list(result.scalars().all())
+
+    # Dynamically compute active employee counts per department
+    count_query = (
+        select(Employee.department_id, func.count(Employee.id))
+        .where(Employee.status == EmployeeStatus.ACTIVE)
+        .group_by(Employee.department_id)
+    )
+    count_res = await db.execute(count_query)
+    counts_map = dict(count_res.all())
+
+    for d in depts:
+        d.employee_count = counts_map.get(d.id, 0)
+
+    return depts
 
 
 async def get_department_by_id(db: AsyncSession, dept_id: int) -> Department | None:
     """
     Look up a single department by its primary key ID.
+    Look up a single department by its primary key ID with manager and employee count.
 
     Args:
         db: Async database session.
@@ -55,6 +79,22 @@ async def get_department_by_id(db: AsyncSession, dept_id: int) -> Department | N
     """
     result = await db.execute(select(Department).where(Department.id == dept_id))
     return result.scalar_one_or_none()
+    query = (
+        select(Department)
+        .options(
+            selectinload(Department.manager).selectinload(Employee.job_position),
+        )
+        .where(Department.id == dept_id)
+    )
+    result = await db.execute(query)
+    dept = result.scalar_one_or_none()
+    if dept:
+        c = await db.scalar(
+            select(func.count(Employee.id))
+            .where(Employee.department_id == dept.id, Employee.status == EmployeeStatus.ACTIVE)
+        )
+        dept.employee_count = c or 0
+    return dept
 
 
 async def get_department_by_code(db: AsyncSession, code: str) -> Department | None:
@@ -122,18 +162,38 @@ async def create_department(db: AsyncSession, data: DepartmentCreate) -> Departm
         )
 
     # 3. Instantiate model (new departments start with is_active=True by default)
+    # 3. Validate manager_id if provided
+    mgr = None
+    if data.manager_id is not None:
+        mgr = await db.scalar(
+            select(Employee)
+            .options(selectinload(Employee.job_position))
+            .where(Employee.id == data.manager_id)
+        )
+        if not mgr:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Manager employee with ID {data.manager_id} not found.",
+            )
+
+    # 4. Instantiate model (new departments start with is_active=True by default)
     dept = Department(
         name=data.name,
         code=data.code,
         description=data.description,
+        manager_id=data.manager_id,
         is_active=True,
     )
+    if mgr:
+        dept.manager = mgr
 
     # 4. Add to session and flush to generate ID and timestamps from PostgreSQL
+    # 5. Add to session and flush to generate ID and timestamps from PostgreSQL
     db.add(dept)
     await db.flush()
     await db.commit()
     await db.refresh(dept)
+    dept.employee_count = 0
     return dept
 
 
@@ -189,11 +249,34 @@ async def update_department(db: AsyncSession, dept_id: int, data: DepartmentUpda
         dept.description = data.description
     if data.is_active is not None:
         dept.is_active = data.is_active
+    if "manager_id" in data.model_fields_set:
+        if data.manager_id is not None:
+            mgr = await db.scalar(
+                select(Employee)
+                .options(selectinload(Employee.job_position))
+                .where(Employee.id == data.manager_id)
+            )
+            if not mgr:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Manager employee with ID {data.manager_id} not found.",
+                )
+            dept.manager = mgr
+            dept.manager_id = data.manager_id
+        else:
+            dept.manager = None
+            dept.manager_id = None
 
     # 5. Flush updates to database, commit, and refresh model attributes
+    # 5. Flush updates to database and commit
     await db.flush()
     await db.commit()
     await db.refresh(dept)
+    c = await db.scalar(
+        select(func.count(Employee.id))
+        .where(Employee.department_id == dept.id, Employee.status == EmployeeStatus.ACTIVE)
+    )
+    dept.employee_count = c or 0
     return dept
 
 

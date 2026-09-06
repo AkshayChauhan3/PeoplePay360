@@ -65,18 +65,26 @@ async def employee_check_in(
     current_user: User = Depends(get_current_user),
 ) -> AttendanceResponse:
     """
-    Self-service check-in for currently authenticated employee.
-
-    Derives employee from authenticated user session; does not accept client-provided employee_id.
+    Check-in for currently authenticated employee or on-behalf by HR/Admin.
     """
-    if current_user.employee_id is None:
+    target_emp_id = None
+    if payload and payload.employee_id is not None:
+        if current_user.role_name not in _HR_ROLES and current_user.employee_id != payload.employee_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to check in on behalf of another employee.",
+            )
+        target_emp_id = payload.employee_id
+    elif current_user.employee_id is not None:
+        target_emp_id = current_user.employee_id
+    else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Current user account is not linked to an employee profile. Please contact HR to link your account.",
+            detail="Current user account is not linked to an employee profile. Please link your account or select an employee.",
         )
 
     ts = payload.timestamp if payload else None
-    att = await attendance_service.check_in(db, current_user.employee_id, ts)
+    att = await attendance_service.check_in(db, target_emp_id, ts)
     return _format_attendance_response(att)
 
 
@@ -87,18 +95,26 @@ async def employee_check_out(
     current_user: User = Depends(get_current_user),
 ) -> AttendanceResponse:
     """
-    Self-service check-out for currently authenticated employee.
-
-    Finds and closes the active open attendance record.
+    Check-out for currently authenticated employee or on-behalf by HR/Admin.
     """
-    if current_user.employee_id is None:
+    target_emp_id = None
+    if payload and payload.employee_id is not None:
+        if current_user.role_name not in _HR_ROLES and current_user.employee_id != payload.employee_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to check out on behalf of another employee.",
+            )
+        target_emp_id = payload.employee_id
+    elif current_user.employee_id is not None:
+        target_emp_id = current_user.employee_id
+    else:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Current user account is not linked to an employee profile.",
         )
 
     ts = payload.timestamp if payload else None
-    att = await attendance_service.check_out(db, current_user.employee_id, ts)
+    att = await attendance_service.check_out(db, target_emp_id, ts)
     return _format_attendance_response(att)
 
 
@@ -168,7 +184,7 @@ async def list_attendances(
     date_to: date | None = Query(None, description="End date filter (YYYY-MM-DD)"),
     status_filter: AttendanceStatus | None = Query(None, alias="status", description="Filter by attendance status"),
     skip: int = Query(0, ge=0),
-    limit: int = Query(50, ge=1, le=100),
+    limit: int = Query(50, ge=1, le=1000),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_hr_management()),
 ) -> AttendanceListResponse:

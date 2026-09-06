@@ -1,16 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { apiService } from '../services/apiService';
+import EntityCombobox from './EntityCombobox';
 
 const normalizeDept = (d, i) => ({
   id: d.code || `D00${i + 1}`,
   rawId: d.id,
   name: d.name || 'General Department',
-  head: d.description?.startsWith('Head: ') ? d.description.replace('Head: ', '') : (d.manager_name || 'Department Lead'),
-  headTitle: 'Department Lead',
-  employees: d.employee_count !== undefined ? d.employee_count : (d.employees || 0),
+  head: d.manager?.full_name || (d.manager_id ? `Employee #${d.manager_id}` : 'No Manager Assigned'),
+  headTitle: d.manager?.job_title || (d.manager ? 'Department Head' : 'Unassigned'),
+  employees: d.employee_count !== undefined ? d.employee_count : 0,
   location: 'Corporate HQ',
-  budget: '₹50L',
-  openRoles: 0,
+  budget: `₹${((d.employee_count || 0) * 65000).toLocaleString('en-IN')}/mo`,
+  openRoles: Math.max(0, 3 - (d.employee_count || 0)),
   isActive: d.is_active !== undefined ? d.is_active : true,
   color: i % 2 === 0 ? '#eef7f7' : '#f6f0f7',
   textColor: i % 2 === 0 ? '#005166' : '#3b123f',
@@ -18,6 +19,7 @@ const normalizeDept = (d, i) => ({
 
 const DepartmentsView = ({ onNavigate }) => {
   const [departments, setDepartments] = useState([]);
+  const [employeesList, setEmployeesList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
@@ -29,8 +31,7 @@ const DepartmentsView = ({ onNavigate }) => {
   const [form, setForm] = useState({
     name: '',
     code: '',
-    head: '',
-    location: 'Corporate HQ',
+    manager_id: '',
     description: '',
   });
 
@@ -45,7 +46,7 @@ const DepartmentsView = ({ onNavigate }) => {
     try {
       const [deptRes, empRes] = await Promise.allSettled([
         apiService.getDepartments(),
-        apiService.getEmployees({ limit: 200 }),
+        apiService.getEmployees({ limit: 500 }),
       ]);
       
       const rawDepts = deptRes.status === 'fulfilled' && Array.isArray(deptRes.value) ? deptRes.value : [];
@@ -53,24 +54,29 @@ const DepartmentsView = ({ onNavigate }) => {
         ? (empRes.value?.items || (Array.isArray(empRes.value) ? empRes.value : []))
         : [];
 
+      setEmployeesList(rawEmps);
+
       const normalized = rawDepts.map((d, i) => {
-        const deptEmps = rawEmps.filter(e => e.department_id === d.id);
-        const manager = deptEmps.find(e => (e.job_position?.name || '').toLowerCase().includes('manager') || (e.job_position?.name || '').toLowerCase().includes('lead')) || deptEmps[0];
-        const mgrName = d.description?.startsWith('Head: ') 
-          ? d.description.replace('Head: ', '') 
-          : (manager ? `${manager.first_name} ${manager.last_name}` : 'Team Lead');
+        const mgrName = d.manager?.full_name 
+          || (d.manager_id ? `Employee #${d.manager_id}` : 'No Manager Assigned');
+        const mgrTitle = d.manager?.job_title 
+          || (d.manager ? 'Department Head' : 'Unassigned');
+        const empCount = d.employee_count !== undefined ? d.employee_count : 0;
 
         return {
           id: d.code || `D00${i + 1}`,
           rawId: d.id,
           name: d.name || 'Department',
           code: d.code,
+          managerId: d.manager_id,
+          manager: d.manager,
           head: mgrName,
-          headTitle: manager?.job_position?.name || 'Department Lead',
-          employees: deptEmps.length,
+          headTitle: mgrTitle,
+          employees: empCount,
+          description: d.description || '',
           location: 'Corporate HQ',
-          budget: `₹${(deptEmps.length * 65000).toLocaleString('en-IN')}/mo`,
-          openRoles: Math.max(0, 3 - deptEmps.length),
+          budget: `₹${(empCount * 65000).toLocaleString('en-IN')}/mo`,
+          openRoles: Math.max(0, 3 - empCount),
           isActive: d.is_active,
           color: i % 2 === 0 ? '#eef7f7' : '#f6f0f7',
           textColor: i % 2 === 0 ? '#005166' : '#3b123f',
@@ -93,7 +99,7 @@ const DepartmentsView = ({ onNavigate }) => {
 
   const handleOpenCreate = () => {
     setEditingDept(null);
-    setForm({ name: '', code: '', head: '', location: 'Corporate HQ', description: '' });
+    setForm({ name: '', code: '', manager_id: '', description: '' });
     setShowModal(true);
   };
 
@@ -102,9 +108,8 @@ const DepartmentsView = ({ onNavigate }) => {
     setForm({
       name: dept.name,
       code: dept.code || dept.id,
-      head: dept.head,
-      location: dept.location || 'Corporate HQ',
-      description: dept.head ? `Head: ${dept.head}` : '',
+      manager_id: dept.managerId !== null && dept.managerId !== undefined ? String(dept.managerId) : '',
+      description: dept.description || '',
     });
     setShowModal(true);
   };
@@ -117,22 +122,21 @@ const DepartmentsView = ({ onNavigate }) => {
         ? form.code.trim().toUpperCase()
         : form.name.trim().toUpperCase().replace(/[^A-Z0-9]/g, '_').slice(0, 15);
 
-      const desc = form.head ? `Head: ${form.head.trim()}` : (form.description || null);
+      const managerIdInt = form.manager_id ? parseInt(form.manager_id, 10) : null;
+
+      const payload = {
+        name: form.name.trim(),
+        code: generatedCode,
+        description: form.description?.trim() || null,
+        manager_id: managerIdInt,
+      };
 
       if (editingDept) {
-        await apiService.updateDepartment(editingDept.rawId, {
-          name: form.name.trim(),
-          code: generatedCode,
-          description: desc,
-        });
-        showToast(`Department ${form.name} updated successfully!`);
+        await apiService.updateDepartment(editingDept.rawId, payload);
+        showToast(`Department "${form.name}" updated successfully!`);
       } else {
-        await apiService.createDepartment({
-          name: form.name.trim(),
-          code: generatedCode,
-          description: desc,
-        });
-        showToast(`Department ${form.name} registered in database!`);
+        await apiService.createDepartment(payload);
+        showToast(`Department "${form.name}" registered in database!`);
       }
       setShowModal(false);
       await fetchDepts();
@@ -349,13 +353,47 @@ const DepartmentsView = ({ onNavigate }) => {
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Department Lead (optional)</label>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>
+                  Department Manager (Select Employee)
+                  Department Manager (Search Employee or enter ID)
+                </label>
+                <select 
+                  className="form-input" 
+                  value={form.manager_id} 
+                  onChange={e => setForm({ ...form, manager_id: e.target.value })}
+                  style={{ width: '100%', height: '38px', background: 'white' }}
+                >
+                  <option value="">-- No Manager Assigned --</option>
+                  {employeesList.map(emp => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.first_name} {emp.last_name} ({emp.employee_code} · {emp.job_title || emp.job_position?.name || 'Staff'})
+                    </option>
+                  ))}
+                </select>
+                <EntityCombobox
+                  value={form.manager_id}
+                  onChange={(id) => setForm({ ...form, manager_id: id ?? '' })}
+                  options={employeesList.map(e => ({
+                    id: e.id,
+                    label: `${e.first_name} ${e.last_name}`,
+                    sublabel: `${e.employee_code} · ${e.job_title || e.job_position?.name || 'Staff'}`
+                  }))}
+                  placeholder="Type name, code, or employee ID…"
+                />
+                <span style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '2px', display: 'block' }}>
+                  Assign an existing employee by their ID as the department head.
+                  Type to filter by name/code, or paste raw employee ID directly.
+                </span>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px' }}>Description (optional)</label>
                 <input 
                   type="text" 
                   className="form-input" 
-                  value={form.head} 
-                  onChange={e => setForm({ ...form, head: e.target.value })} 
-                  placeholder="e.g. Tariq Patel"
+                  value={form.description} 
+                  onChange={e => setForm({ ...form, description: e.target.value })} 
+                  placeholder="e.g. Core platform engineering and infrastructure"
                   style={{ width: '100%' }}
                 />
               </div>

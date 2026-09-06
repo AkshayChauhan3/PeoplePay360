@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { apiService } from '../services/apiService';
+import EntityCombobox from './EntityCombobox';
 
 const statusStyle = {
   PAID: { bg: '#eaf5ef', text: '#0b7a42' },
@@ -476,6 +477,14 @@ const PayrunsView = ({ onNavigate }) => {
                     <option value="1">Standard Full-Time Tech Structure</option>
                   )}
                 </select>
+                <EntityCombobox
+                  items={structures}
+                  value={newPeriod.structure_id}
+                  onChange={(val) => setNewPeriod({ ...newPeriod, structure_id: val })}
+                  placeholder="Search or select salary structure..."
+                  getOptionLabel={(s) => `${s.name} (${s.code || `SS-${s.id}`})`}
+                  required
+                />
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>

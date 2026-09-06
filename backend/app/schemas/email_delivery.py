@@ -6,11 +6,10 @@ individual delivery audit records, and batch readiness summaries.
 """
 
 from datetime import datetime
-import uuid
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.email_delivery import EmailDeliveryStatus
+from app.models.email_delivery import EmailDeliveryStatus, EmailFailureType
 
 
 class PayslipEmailDeliveryItem(BaseModel):
@@ -21,7 +20,7 @@ class PayslipEmailDeliveryItem(BaseModel):
     id: int
     payrun_id: int
     payslip_id: int
-    employee_id: uuid.UUID
+    employee_id: int
     employee_code: str = Field(description="Unique organizational code of the employee")
     employee_name: str = Field(description="Full name of the employee")
     recipient_email: str
@@ -30,6 +29,11 @@ class PayslipEmailDeliveryItem(BaseModel):
     status: EmailDeliveryStatus
     error_message: str | None = None
     retry_count: int = 0
+    attempt_count: int = 0
+    failure_type: EmailFailureType | None = None
+    last_attempt_at: datetime | None = None
+    next_retry_at: datetime | None = None
+    storage_key: str | None = None
     sent_at: datetime | None = None
     created_at: datetime
 
@@ -78,9 +82,27 @@ class SinglePayslipEmailResponse(BaseModel):
     """Response returned after sending an individual payslip email."""
 
     payslip_id: int
-    employee_id: uuid.UUID
+    employee_id: int
     recipient_email: str
     status: EmailDeliveryStatus
     error_message: str | None = None
     sent_at: datetime | None = None
     message: str
+
+
+class PayslipEmailDeliveryDetailResponse(BaseModel):
+    """Detailed audit record for a single payslip delivery status query."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    payslip_id: int
+    employee_id: int
+    recipient_email: str
+    status: EmailDeliveryStatus
+    attempt_count: int = 0
+    failure_type: EmailFailureType | None = None
+    error_message: str | None = None
+    sent_at: datetime | None = None
+    last_attempt_at: datetime | None = None
+    next_retry_at: datetime | None = None
+    storage_key: str | None = None

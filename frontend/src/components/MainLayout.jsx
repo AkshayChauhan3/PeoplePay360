@@ -5,7 +5,6 @@ import { apiService } from '../services/apiService';
 const breadcrumbs = {
   dashboard: 'Dashboard',
   directory: 'Employees › Directory',
-  employee_profile: 'Employees › Employee Profile',
   departments: 'Employees › Departments',
   job_positions: 'Employees › Job Positions',
   all_contracts: 'Contracts › All Contracts',
@@ -13,6 +12,7 @@ const breadcrumbs = {
   active_contracts: 'Contracts › Active Contracts',
   attendance_records: 'Attendance › Records',
   monthly_overview: 'Attendance › Monthly Overview',
+  schedules: 'Attendance › Working Schedules',
   time_off_requests: 'Time Off › Requests',
   leave_allocations: 'Time Off › Allocations',
   time_off_types: 'Time Off › Types',
@@ -395,11 +395,11 @@ function ProfileDropdown({ currentUser, onLogout, onNavigate }) {
     {
       icon: (
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
         </svg>
       ),
-      label: 'My Profile',
-      action: () => { onNavigate('employee_profile'); setOpen(false); }
+      label: 'Employee Directory',
+      action: () => { onNavigate('directory'); setOpen(false); }
     },
     {
       icon: (
@@ -529,7 +529,7 @@ const MainLayout = ({ currentView, onNavigate, currentUser, onLogout, onSwitchRo
           <div className="header-actions">
             {/* Role switcher */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'var(--surface-structural, #f7fafa)', padding: '3px 8px', borderRadius: '6px', border: '1px solid var(--border-structural)' }}>
-              <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Role:</span>
+              <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Demo Persona Preview:</span>
               <select
                 className="control-select"
                 value={currentUser?.role || 'ADMIN'}

@@ -17,7 +17,10 @@ from app.dependencies.auth import (
 )
 from app.models.payslip import PayslipStatus
 from app.models.user import User, UserRole
-from app.schemas.email_delivery import SinglePayslipEmailResponse
+from app.schemas.email_delivery import (
+    PayslipEmailDeliveryDetailResponse,
+    SinglePayslipEmailResponse,
+)
 from app.schemas.payslip import PayslipListResponse, PayslipResponse
 from app.services import email_delivery_service, payslip_service, pdf_service
 
@@ -163,5 +166,42 @@ async def send_individual_payslip_email(
     Requires the associated payrun to be in VALIDATED or PAID state.
     """
     return await email_delivery_service.send_single_payslip_email(db, payslip_id)
+
+
+@router.get(
+    "/{payslip_id}/email-delivery",
+    response_model=PayslipEmailDeliveryDetailResponse,
+    summary="Get individual payslip email delivery status",
+)
+async def get_payslip_email_delivery_status(
+    payslip_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Retrieve email delivery status, attempt counts, and error details for a payslip.
+    Authorized for Payroll staff/Admin, or the owner employee.
+    """
+    payslip = await payslip_service.get_payslip_by_id(db, payslip_id)
+    if not payslip:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Payslip with ID {payslip_id} not found.",
+        )
+
+    is_payroll_staff = current_user.role_name in _PAYROLL_ROLES
+    is_owner_employee = (
+        current_user.employee_id is not None
+        and current_user.employee_id == payslip.employee_id
+    )
+
+    if not is_payroll_staff and not is_owner_employee:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to access this delivery record.",
+        )
+
+    return await email_delivery_service.get_single_payslip_email_delivery(db, payslip_id)
+
 
 

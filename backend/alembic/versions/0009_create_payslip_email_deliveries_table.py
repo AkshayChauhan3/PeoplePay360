@@ -36,7 +36,7 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
         sa.Column("payrun_id", sa.Integer(), nullable=False),
         sa.Column("payslip_id", sa.Integer(), nullable=False),
-        sa.Column("employee_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("employee_id", sa.Integer(), nullable=False),
         sa.Column("recipient_email", sa.String(length=255), nullable=False),
         sa.Column("recipient_name", sa.String(length=200), nullable=False),
         sa.Column("subject", sa.String(length=255), nullable=False),

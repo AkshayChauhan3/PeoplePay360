@@ -2,10 +2,11 @@
 Automated Email Delivery Service — PeoplePay360
 
 Manages end-to-end payslip email generation and transmission:
-1. ReportLab PDF payslip generation and attachment.
+1. ReportLab PDF payslip generation, storage persistence, and attachment.
 2. Professional responsive HTML email body with plain-text alternative.
-3. Threaded asynchronous SMTP transport with zero-credential Mock Mode.
-4. Comprehensive delivery audit tracking (SENT vs FAILED) and HR 'Retry Failed' workflow.
+3. Modular EmailProvider abstraction with zero-credential Mock Mode and SMTP.
+4. Comprehensive delivery audit tracking (PENDING, SENDING, SENT, FAILED),
+   failure classification (TEMPORARY vs PERMANENT), and retry workflows.
 """
 
 import asyncio
@@ -24,16 +25,27 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
-from app.models.email_delivery import EmailDeliveryStatus, PayslipEmailDelivery
+from app.models.email_delivery import (
+    EmailDeliveryStatus,
+    EmailFailureType,
+    PayslipEmailDelivery,
+)
 from app.models.payrun import Payrun, PayrunStatus
 from app.models.payslip import Payslip, PayslipStatus
 from app.schemas.email_delivery import (
     EmailDeliverySummaryResponse,
+    PayslipEmailDeliveryDetailResponse,
     PayslipEmailDeliveryItem,
     SendPayslipsResponse,
     SinglePayslipEmailResponse,
 )
 from app.services import pdf_service
+from app.services.email import (
+    EmailAttachment,
+    EmailMessage,
+    get_email_provider,
+)
+from app.services.storage import get_storage_service
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +53,12 @@ logger = logging.getLogger(__name__)
 def _utcnow() -> datetime:
     """Return current timestamp in UTC."""
     return datetime.now(timezone.utc)
+
+
+def _generate_storage_key(payslip: Payslip) -> str:
+    emp = payslip.employee
+    emp_code = emp.employee_code if emp else f"emp_{payslip.employee_id}"
+    return f"payruns/{payslip.payrun_id}/payslips/{payslip.id}_{emp_code}_{payslip.period_start}_{payslip.period_end}.pdf"
 
 
 def build_payslip_email_content(payslip: Payslip) -> tuple[str, str, str]:
@@ -99,25 +117,24 @@ Payroll Department
             background: #ffffff;
             border-radius: 12px;
             overflow: hidden;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
-            border: 1px solid #e2e8f0;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
         }}
         .header {{
-            background: #0f172a;
+            background: linear-gradient(135deg, #1e3a8a 0%, #0284c7 100%);
             color: #ffffff;
-            padding: 30px 40px;
+            padding: 32px 40px;
             text-align: center;
         }}
         .header h1 {{
             margin: 0;
-            font-size: 22px;
+            font-size: 24px;
             font-weight: 700;
-            letter-spacing: 0.5px;
+            letter-spacing: -0.025em;
         }}
         .header p {{
             margin: 8px 0 0 0;
-            color: #94a3b8;
-            font-size: 13px;
+            font-size: 14px;
+            opacity: 0.9;
         }}
         .content {{
             padding: 36px 40px;
@@ -126,7 +143,6 @@ Payroll Department
             font-size: 16px;
             font-weight: 600;
             margin-bottom: 12px;
-            color: #0f172a;
         }}
         .intro-text {{
             font-size: 14px;
@@ -135,22 +151,24 @@ Payroll Department
         }}
         .highlight-card {{
             background-color: #f8fafc;
+            border: 1px solid #e2e8f0;
             border-left: 4px solid #0284c7;
-            border-radius: 6px;
+            border-radius: 8px;
             padding: 16px 20px;
             margin-bottom: 24px;
         }}
         .highlight-title {{
             font-size: 12px;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.05em;
             color: #64748b;
-            margin-bottom: 4px;
+            font-weight: 600;
         }}
         .highlight-amount {{
-            font-size: 26px;
+            font-size: 28px;
             font-weight: 700;
-            color: #0369a1;
+            color: #0f172a;
+            margin-top: 4px;
         }}
         .table-container {{
             margin-bottom: 24px;
@@ -158,43 +176,37 @@ Payroll Department
         table {{
             width: 100%;
             border-collapse: collapse;
-            font-size: 13px;
         }}
         th, td {{
             padding: 10px 12px;
-            text-align: left;
-            border-bottom: 1px solid #e2e8f0;
+            font-size: 13px;
+            border-bottom: 1px solid #f1f5f9;
         }}
         th {{
-            background-color: #f8fafc;
-            color: #475569;
+            text-align: left;
+            color: #64748b;
             font-weight: 600;
         }}
         .text-right {{
             text-align: right;
         }}
         .font-bold {{
-            font-weight: 700;
-        }}
-        .badge {{
-            display: inline-block;
-            background: #e0f2fe;
-            color: #0369a1;
-            padding: 4px 10px;
-            border-radius: 9999px;
-            font-size: 12px;
             font-weight: 600;
         }}
-        .attachment-notice {{
-            background-color: #ecfdf5;
-            border: 1px dashed #10b981;
+        .attachment-banner {{
+            background-color: #f0fdf4;
+            border: 1px solid #bbf7d0;
             border-radius: 8px;
             padding: 14px 18px;
             font-size: 13px;
-            color: #065f46;
-            margin-bottom: 24px;
+            color: #166534;
             display: flex;
             align-items: center;
+            margin-bottom: 24px;
+        }}
+        .attachment-banner strong {{
+            display: block;
+            margin-bottom: 2px;
         }}
         .footer {{
             background-color: #f8fafc;
@@ -263,22 +275,24 @@ Payroll Department
                 </table>
             </div>
 
-            <div class="attachment-notice">
-                <span>📎 <strong>PDF Payslip Attached:</strong> An official digital copy of your itemized ReportLab payslip is attached to this email for your records.</span>
+            <div class="attachment-banner">
+                <div>
+                    <strong>PDF Salary Slip Attached</strong>
+                    An encrypted, high-fidelity salary slip detailing all calculation rules and tax deductions is attached to this email.
+                </div>
             </div>
 
             <p style="font-size: 13px; color: #64748b; margin: 0;">
-                If you have any questions or notice any discrepancy regarding your salary calculation, please contact the Payroll Department.
+                If you notice discrepancies or have queries regarding tax withholdings, please reach out to the Payroll team promptly.
             </p>
         </div>
         <div class="footer">
-            <p><strong>{settings.company_name}</strong> • Payroll Operations</p>
-            <p>This is an automated confidential communication. Please do not reply directly to this email.</p>
+            <p>This is an automated system notification from PeoplePay360.</p>
+            <p>&copy; {datetime.now().year} {settings.company_name}. All rights reserved.</p>
         </div>
     </div>
 </body>
-</html>
-"""
+</html>"""
 
     return subject, text_body, html_body
 
@@ -288,7 +302,7 @@ def compose_payslip_mime_message(
     pdf_bytes: bytes,
     sender_email: str,
     sender_name: str,
-) -> tuple[MIMEMultipart, str]:
+) -> tuple[MIMEMultipart, str, str]:
     """
     Packages the HTML body, plain text alternative, and ReportLab PDF attachment
     into a standards-compliant MIME multipart email message.
@@ -322,7 +336,6 @@ def compose_payslip_mime_message(
 
 
 def _send_smtp_sync(
-
     to_email: str,
     msg: MIMEMultipart,
     is_live_smtp: bool,
@@ -331,15 +344,12 @@ def _send_smtp_sync(
     Synchronous SMTP transmission executed within a worker thread.
     Handles both live SMTP and Mock Mode simulation.
     """
-    # 1. Validation checks
     if not to_email or "@" not in to_email or "." not in to_email.split("@")[-1]:
         return False, f"Invalid recipient email address: '{to_email}'"
 
-    # Test trigger simulation: any address with fail@ or invalid-test
     if "fail@" in to_email.lower() or "invalid-mock" in to_email.lower():
         return False, "Simulated delivery rejection: mailbox unavailable or bounce rule triggered."
 
-    # 2. Mock Delivery Mode
     if not is_live_smtp:
         logger.info(
             "Mock Email Sent -> To: %s | Subject: %s | Size: %d bytes",
@@ -349,7 +359,6 @@ def _send_smtp_sync(
         )
         return True, None
 
-    # 3. Live SMTP Transmission
     try:
         if settings.smtp_port == 465:
             server = smtplib.SMTP_SSL(settings.smtp_host, settings.smtp_port, timeout=15)
@@ -411,22 +420,39 @@ async def send_single_payslip_email(
             ),
         )
 
-    # 3. Generate ReportLab PDF
-    pdf_bytes = pdf_service.generate_payslip_pdf(payslip, company_name=settings.company_name)
+    # 3. PDF Persistence via Storage Service
+    storage_service = get_storage_service()
+    storage_key = payslip.pdf_storage_key or _generate_storage_key(payslip)
+    pdf_bytes = await storage_service.get_payslip_pdf(storage_key)
+    if not pdf_bytes:
+        pdf_bytes = pdf_service.generate_payslip_pdf(payslip, company_name=settings.company_name)
+        await storage_service.save_payslip_pdf(storage_key, pdf_bytes)
+    payslip.pdf_storage_key = storage_key
 
-    # 4. Compose MIME multipart message
-    msg, recipient_email, email_subject = compose_payslip_mime_message(
-        payslip=payslip,
-        pdf_bytes=pdf_bytes,
-        sender_email=settings.smtp_from_email,
-        sender_name=settings.smtp_from_name,
+    # 4. Dispatch via Email Provider
+    email_provider = get_email_provider()
+    emp = payslip.employee
+    emp_name = f"{emp.first_name} {emp.last_name}".strip() if emp else "Employee"
+    recipient_email = emp.email.strip() if emp and emp.email else ""
+    subject, text_body, html_body = build_payslip_email_content(payslip)
+
+    filename = f"Payslip_{emp.employee_code if emp else 'EMP'}_{payslip.period_start}_{payslip.period_end}.pdf"
+    attachment = EmailAttachment(filename=filename, content=pdf_bytes, mime_type="application/pdf")
+    email_message = EmailMessage(
+        to_email=recipient_email,
+        to_name=emp_name,
+        subject=subject,
+        html_body=html_body,
+        text_body=text_body,
+        attachments=[attachment],
     )
 
-    # 5. Transmit in thread pool
-    is_live = settings.is_smtp_configured
-    success, error_msg = await asyncio.to_thread(_send_smtp_sync, recipient_email, msg, is_live)
+    result = await email_provider.send_email(email_message)
+    success = result.success
+    error_msg = result.error_message
+    fail_type = result.failure_type
 
-    # 6. Upsert delivery record
+    # 5. Upsert delivery record
     del_query = select(PayslipEmailDelivery).where(
         PayslipEmailDelivery.payrun_id == payslip.payrun_id,
         PayslipEmailDelivery.payslip_id == payslip.id,
@@ -435,16 +461,14 @@ async def send_single_payslip_email(
     delivery = del_res.scalar_one_or_none()
 
     now = _utcnow()
-    emp_name = (
-        f"{payslip.employee.first_name} {payslip.employee.last_name}".strip()
-        if payslip.employee
-        else "Employee"
-    )
-
     if delivery:
         delivery.retry_count += 1
+        delivery.attempt_count = (delivery.attempt_count or 0) + 1
         delivery.status = EmailDeliveryStatus.SENT if success else EmailDeliveryStatus.FAILED
         delivery.error_message = error_msg if not success else None
+        delivery.failure_type = fail_type if not success else None
+        delivery.last_attempt_at = now
+        delivery.storage_key = storage_key
         delivery.sent_at = now if success else None
         delivery.updated_at = now
     else:
@@ -454,16 +478,19 @@ async def send_single_payslip_email(
             employee_id=payslip.employee_id,
             recipient_email=recipient_email,
             recipient_name=emp_name,
-            subject=email_subject,
+            subject=subject,
             status=EmailDeliveryStatus.SENT if success else EmailDeliveryStatus.FAILED,
             error_message=error_msg if not success else None,
+            failure_type=fail_type if not success else None,
             retry_count=0,
+            attempt_count=1,
+            last_attempt_at=now,
+            storage_key=storage_key,
             sent_at=now if success else None,
             created_at=now,
             updated_at=now,
         )
         db.add(delivery)
-
 
     await db.commit()
     await db.refresh(delivery)
@@ -544,7 +571,9 @@ async def deliver_payrun_payslips(
     )
     existing_deliveries = {d.payslip_id: d for d in existing_records_res.scalars().all()}
 
-    is_live = settings.is_smtp_configured
+    storage_service = get_storage_service()
+    email_provider = get_email_provider()
+
     total_payslips = len(payrun.payslips)
     sent_count = 0
     failed_count = 0
@@ -568,31 +597,46 @@ async def deliver_payrun_payslips(
 
         processed_count += 1
 
-        # Generate ReportLab PDF
-        pdf_bytes = pdf_service.generate_payslip_pdf(ps, company_name=settings.company_name)
+        # PDF Storage Resolution & Generation
+        storage_key = ps.pdf_storage_key or (existing.storage_key if existing else None) or _generate_storage_key(ps)
+        pdf_bytes = await storage_service.get_payslip_pdf(storage_key)
+        if not pdf_bytes:
+            pdf_bytes = pdf_service.generate_payslip_pdf(ps, company_name=settings.company_name)
+            await storage_service.save_payslip_pdf(storage_key, pdf_bytes)
+        ps.pdf_storage_key = storage_key
 
-        # Build MIME Message
-        msg, recipient_email, email_subject = compose_payslip_mime_message(
-            payslip=ps,
-            pdf_bytes=pdf_bytes,
-            sender_email=settings.smtp_from_email,
-            sender_name=settings.smtp_from_name,
+        # Prepare Email Message
+        emp = ps.employee
+        emp_name = f"{emp.first_name} {emp.last_name}".strip() if emp else "Employee"
+        recipient_email = emp.email.strip() if emp and emp.email else ""
+        subject, text_body, html_body = build_payslip_email_content(ps)
+
+        filename = f"Payslip_{emp.employee_code if emp else 'EMP'}_{ps.period_start}_{ps.period_end}.pdf"
+        attachment = EmailAttachment(filename=filename, content=pdf_bytes, mime_type="application/pdf")
+        email_message = EmailMessage(
+            to_email=recipient_email,
+            to_name=emp_name,
+            subject=subject,
+            html_body=html_body,
+            text_body=text_body,
+            attachments=[attachment],
         )
 
-        # Transmit
-        success, error_msg = await asyncio.to_thread(_send_smtp_sync, recipient_email, msg, is_live)
+        # Dispatch
+        result = await email_provider.send_email(email_message)
+        success = result.success
+        error_msg = result.error_message
+        fail_type = result.failure_type
 
         now = _utcnow()
-        emp_name = (
-            f"{ps.employee.first_name} {ps.employee.last_name}".strip()
-            if ps.employee
-            else "Employee"
-        )
-
         if existing:
             existing.retry_count += 1
+            existing.attempt_count = (existing.attempt_count or 0) + 1
             existing.status = EmailDeliveryStatus.SENT if success else EmailDeliveryStatus.FAILED
             existing.error_message = error_msg if not success else None
+            existing.failure_type = fail_type if not success else None
+            existing.last_attempt_at = now
+            existing.storage_key = storage_key
             existing.sent_at = now if success else None
             existing.updated_at = now
         else:
@@ -602,16 +646,19 @@ async def deliver_payrun_payslips(
                 employee_id=ps.employee_id,
                 recipient_email=recipient_email,
                 recipient_name=emp_name,
-                subject=email_subject,
+                subject=subject,
                 status=EmailDeliveryStatus.SENT if success else EmailDeliveryStatus.FAILED,
                 error_message=error_msg if not success else None,
+                failure_type=fail_type if not success else None,
                 retry_count=0,
+                attempt_count=1,
+                last_attempt_at=now,
+                storage_key=storage_key,
                 sent_at=now if success else None,
                 created_at=now,
                 updated_at=now,
             )
             db.add(new_del)
-
             existing_deliveries[ps.id] = new_del
 
         if success:
@@ -667,7 +714,6 @@ async def get_payrun_email_delivery_summary(
     )
     del_res = await db.execute(del_query)
     deliveries = list(del_res.scalars().all())
-    delivery_map = {d.payslip_id: d for d in deliveries}
 
     sent_count = 0
     failed_count = 0
@@ -678,7 +724,7 @@ async def get_payrun_email_delivery_summary(
             sent_count += 1
         elif d.status == EmailDeliveryStatus.FAILED:
             failed_count += 1
-        elif d.status == EmailDeliveryStatus.PENDING:
+        elif d.status in (EmailDeliveryStatus.PENDING, EmailDeliveryStatus.SENDING):
             pending_count += 1
 
     total_payslips = len(payrun.payslips)
@@ -687,7 +733,6 @@ async def get_payrun_email_delivery_summary(
 
     # 3. Format items
     items: list[PayslipEmailDeliveryItem] = []
-    # Build employee lookup
     emp_map = {ps.id: ps.employee for ps in payrun.payslips}
 
     for d in deliveries:
@@ -709,6 +754,11 @@ async def get_payrun_email_delivery_summary(
                 status=d.status,
                 error_message=d.error_message,
                 retry_count=d.retry_count,
+                attempt_count=d.attempt_count or d.retry_count,
+                failure_type=d.failure_type,
+                last_attempt_at=d.last_attempt_at,
+                next_retry_at=d.next_retry_at,
+                storage_key=d.storage_key,
                 sent_at=d.sent_at,
                 created_at=d.created_at,
             )
@@ -724,4 +774,44 @@ async def get_payrun_email_delivery_summary(
         not_attempted_count=not_attempted_count,
         can_retry=can_retry,
         deliveries=items,
+    )
+
+
+async def get_single_payslip_email_delivery(
+    db: AsyncSession,
+    payslip_id: int,
+) -> PayslipEmailDeliveryDetailResponse:
+    """
+    Retrieves the email delivery status, attempt counts, and error details for a payslip.
+    """
+    res = await db.execute(
+        select(PayslipEmailDelivery).where(PayslipEmailDelivery.payslip_id == payslip_id)
+    )
+    delivery = res.scalar_one_or_none()
+    if not delivery:
+        # Check if payslip exists
+        ps_res = await db.execute(select(Payslip).where(Payslip.id == payslip_id))
+        ps = ps_res.scalar_one_or_none()
+        if not ps:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Payslip with ID {payslip_id} not found.",
+            )
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No email delivery record found for payslip with ID {payslip_id}.",
+        )
+
+    return PayslipEmailDeliveryDetailResponse(
+        payslip_id=delivery.payslip_id,
+        employee_id=delivery.employee_id,
+        recipient_email=delivery.recipient_email,
+        status=delivery.status,
+        attempt_count=delivery.attempt_count or delivery.retry_count,
+        failure_type=delivery.failure_type,
+        error_message=delivery.error_message,
+        sent_at=delivery.sent_at,
+        last_attempt_at=delivery.last_attempt_at,
+        next_retry_at=delivery.next_retry_at,
+        storage_key=delivery.storage_key,
     )

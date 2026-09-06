@@ -34,6 +34,8 @@ class EmployeeCreate(BaseModel):
     department_id: int = Field(..., description="Referenced department ID")
     job_position_id: int = Field(..., description="Referenced job position ID")
     manager_id: UUID | int | str | None = Field(default=None, description="Optional manager employee ID")
+    working_schedule_id: int | None = Field(default=None, description="Optional working schedule ID")
+    user_id: int | None = Field(default=None, description="Optional User account ID to link to this employee")
     status: EmployeeStatus = Field(default=EmployeeStatus.ACTIVE, description="Initial employee status")
     bank_name: str | None = Field(default=None, max_length=100, description="Name of the employee's bank")
     bank_account_number: str | None = Field(default=None, max_length=50, description="Bank account number")
@@ -41,9 +43,9 @@ class EmployeeCreate(BaseModel):
     pan_number: str | None = Field(default=None, max_length=20, description="Permanent Account Number (PAN)")
     account_holder_name: str | None = Field(default=None, max_length=100, description="Beneficiary account holder name")
 
-    @field_validator("manager_id", mode="before")
+    @field_validator("manager_id", "working_schedule_id", "user_id", mode="before")
     @classmethod
-    def sanitize_manager_id(cls, v: Any) -> Any:
+    def sanitize_manager_and_schedule_id(cls, v: Any) -> Any:
         if v == 0 or v == "0" or v == "":
             return None
         return v
@@ -82,12 +84,20 @@ class EmployeeUpdate(BaseModel):
     department_id: int | None = Field(default=None)
     job_position_id: int | None = Field(default=None)
     manager_id: UUID | int | str | None = Field(default=None)
+    working_schedule_id: int | None = Field(default=None)
     status: EmployeeStatus | None = Field(default=None)
     bank_name: str | None = Field(default=None, max_length=100)
     bank_account_number: str | None = Field(default=None, max_length=50)
     ifsc_code: str | None = Field(default=None, max_length=20)
     pan_number: str | None = Field(default=None, max_length=20)
     account_holder_name: str | None = Field(default=None, max_length=100)
+
+    @field_validator("manager_id", "working_schedule_id", mode="before")
+    @classmethod
+    def sanitize_update_fks(cls, v: Any) -> Any:
+        if v == 0 or v == "0" or v == "":
+            return None
+        return v
 
     @field_validator("employee_code")
     @classmethod
@@ -127,6 +137,9 @@ class EmployeeResponse(BaseModel):
     department_id: int
     job_position_id: int
     manager_id: UUID | int | str | None = None
+    working_schedule_id: int | None = None
+    user_id: int | None = None
+    user_email: str | None = None
     status: EmployeeStatus
     bank_name: str | None = None
     bank_account_number: str | None = None

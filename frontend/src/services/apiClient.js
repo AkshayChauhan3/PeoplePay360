@@ -1,5 +1,5 @@
 // PeoplePay360 - HTTP API Client with JWT Bearer Token Handling
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_URL = import.meta.env.VITE_API_URL || '';
 
 class ApiClient {
   constructor() {
@@ -10,9 +10,18 @@ class ApiClient {
     return localStorage.getItem('access_token');
   }
 
+  getToken() {
+    return this.getAccessToken();
+  }
+
   setTokens(accessToken, refreshToken) {
     if (accessToken) localStorage.setItem('access_token', accessToken);
     if (refreshToken) localStorage.setItem('refresh_token', refreshToken);
+  }
+
+  setAuth(accessToken, user = null) {
+    if (accessToken) this.setTokens(accessToken);
+    if (user) this.setStoredUser(user);
   }
 
   clearTokens() {
@@ -58,6 +67,9 @@ class ApiClient {
       if (response.status === 401) {
         // Token expired or invalid
         this.clearTokens();
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('auth:unauthorized', { detail: { endpoint } }));
+        }
       }
 
       if (!response.ok) {

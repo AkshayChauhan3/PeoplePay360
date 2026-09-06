@@ -108,6 +108,46 @@ async def test_create_and_get_working_schedule(
     assert get_res.json()["id"] == data["id"]
 
 
+async def test_update_and_delete_working_schedule(
+    async_client: AsyncClient,
+    admin_auth_headers: dict[str, str],
+) -> None:
+    # 1. Create schedule
+    payload = {
+        "name": "To Be Updated Schedule",
+        "calendar_type": "STANDARD",
+        "lines": [
+            {"day_of_week": 0, "start_time": "09:00:00", "end_time": "18:00:00", "break_minutes": 60},
+            {"day_of_week": 1, "start_time": "09:00:00", "end_time": "18:00:00", "break_minutes": 60},
+        ],
+    }
+    create_res = await async_client.post("/api/v1/schedules", json=payload, headers=admin_auth_headers)
+    assert create_res.status_code == 201
+    sched_id = create_res.json()["id"]
+
+    # 2. Update name and lines
+    update_payload = {
+        "name": "Updated Schedule Name",
+        "lines": [
+            {"day_of_week": 0, "start_time": "10:00:00", "end_time": "18:00:00", "break_minutes": 60},
+        ],
+    }
+    patch_res = await async_client.patch(f"/api/v1/schedules/{sched_id}", json=update_payload, headers=admin_auth_headers)
+    assert patch_res.status_code == 200
+    updated_data = patch_res.json()
+    assert updated_data["name"] == "Updated Schedule Name"
+    assert updated_data["days_per_week"] == 1
+    assert float(updated_data["hours_per_week"]) == 7.0
+
+    # 3. Delete schedule
+    del_res = await async_client.delete(f"/api/v1/schedules/{sched_id}", headers=admin_auth_headers)
+    assert del_res.status_code == 204
+
+    # 4. Verify 404 after deletion
+    get_res = await async_client.get(f"/api/v1/schedules/{sched_id}", headers=admin_auth_headers)
+    assert get_res.status_code == 404
+
+
 async def test_list_schedules(
     async_client: AsyncClient,
     admin_auth_headers: dict[str, str],

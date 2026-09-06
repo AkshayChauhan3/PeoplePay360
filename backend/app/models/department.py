@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, Integer, String, text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -11,15 +11,21 @@ if TYPE_CHECKING:
 
 
 def _utcnow() -> datetime:
+    """Helper returning current timestamp in UTC timezone."""
     return datetime.now(timezone.utc)
 
 
 class Department(Base):
     """
-    Department organizational entity.
+    Department master entity representing an organizational unit.
 
-    Groups employees and provides department-level aggregations
-    for payroll analytics and dashboard charts.
+    Examples: 'Engineering', 'Human Resources', 'Finance & Accounts', 'Sales'.
+
+    Key constraints:
+    - `name` is unique across the company.
+    - `code` is unique and normalized to uppercase (e.g. 'ENG', 'FIN').
+    - `is_active` supports soft deactivation, ensuring historical payslips,
+      attendance, and contracts retain their organizational reference.
     """
 
     __tablename__ = "departments"
@@ -30,6 +36,7 @@ class Department(Base):
         autoincrement=True,
     )
 
+    # Department name (e.g. "Engineering"). Unique and indexed.
     name: Mapped[str] = mapped_column(
         String(150),
         unique=True,
@@ -37,6 +44,7 @@ class Department(Base):
         nullable=False,
     )
 
+    # Short organizational code (e.g. "ENG"). Unique and normalized.
     code: Mapped[str] = mapped_column(
         String(50),
         unique=True,
@@ -49,6 +57,16 @@ class Department(Base):
         nullable=True,
     )
 
+    # Department Head / Manager Foreign Key referencing employees.id
+    manager_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("employees.id", ondelete="SET NULL", name="fk_departments_manager_id_employees"),
+        nullable=True,
+        index=True,
+        comment="Department Head / Manager referencing employees.id",
+    )
+
+    # Soft deactivation flag. Prevents cascading deletes from breaking history.
     is_active: Mapped[bool] = mapped_column(
         Boolean,
         default=True,
@@ -58,22 +76,31 @@ class Department(Base):
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        nullable=False,
         default=_utcnow,
         server_default=text("now()"),
+        nullable=False,
     )
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        nullable=False,
         default=_utcnow,
         onupdate=_utcnow,
         server_default=text("now()"),
+        nullable=False,
     )
 
+    # Department Manager relationship
+    manager: Mapped["Employee | None"] = relationship(
+        "Employee",
+        foreign_keys=[manager_id],
+        lazy="selectin",
+    )
+
+    # Bidirectional relationship: all employees assigned to this department
     employees: Mapped[list["Employee"]] = relationship(
         "Employee",
         back_populates="department",
+        foreign_keys="Employee.department_id",
     )
 
     def __repr__(self) -> str:

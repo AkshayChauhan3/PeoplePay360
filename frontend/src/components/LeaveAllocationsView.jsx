@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { apiService } from '../services/apiService';
+import EntityCombobox from './EntityCombobox';
 
-const LeaveAllocationsView = () => {
+const LeaveAllocationsView = ({ filterEmployeeId, onClearFilter, onNavigate, currentUser }) => {
   const [allocations, setAllocations] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [leaveTypes, setLeaveTypes] = useState([]);
@@ -31,6 +32,7 @@ const LeaveAllocationsView = () => {
       const [allocRes, empRes, typesRes] = await Promise.allSettled([
         apiService.getAllocations(),
         apiService.getEmployees({ limit: 100 }),
+        apiService.getEmployees({ limit: 500 }),
         apiService.getTimeOffTypes(),
       ]);
 
@@ -141,10 +143,16 @@ const LeaveAllocationsView = () => {
     document.body.removeChild(link);
   };
 
-  const totalCount = allocations.length;
-  const totalAllocated = allocations.reduce((sum, a) => sum + Number(a.allocated_quantity || 0), 0);
-  const totalUsed = allocations.reduce((sum, a) => sum + Number(a.used_quantity || 0), 0);
-  const totalRemaining = allocations.reduce((sum, a) => sum + Number(a.remaining_quantity || 0), 0);
+  const baseAllocations = filterEmployeeId
+    ? allocations.filter(a => Number(a.employee_id || a.employee?.id) === Number(filterEmployeeId))
+    : allocations;
+
+  const totalCount = baseAllocations.length;
+  const totalAllocated = baseAllocations.reduce((sum, a) => sum + Number(a.allocated_quantity || 0), 0);
+  const totalUsed = baseAllocations.reduce((sum, a) => sum + Number(a.used_quantity || 0), 0);
+  const totalRemaining = baseAllocations.reduce((sum, a) => sum + Number(a.remaining_quantity || 0), 0);
+
+  const filteredEmp = filterEmployeeId ? employees.find(e => e.id === Number(filterEmployeeId)) : null;
 
   return (
     <>
@@ -172,6 +180,39 @@ const LeaveAllocationsView = () => {
       {toastMsg && (
         <div style={{ background: '#ecfdf5', border: '1px solid #10b981', color: '#065f46', padding: '10px 16px', borderRadius: '8px', marginBottom: '16px', fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span>✓</span> {toastMsg}
+        </div>
+      )}
+
+      {filterEmployeeId && (
+        <div style={{ 
+          background: '#eff6ff', 
+          border: '1px solid #bfdbfe', 
+          borderRadius: '8px', 
+          padding: '10px 16px', 
+          marginBottom: '16px', 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'space-between' 
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#1e40af' }}>
+            <span style={{ fontSize: '16px' }}>📊</span>
+            <span>
+              Showing leave allocations filtered for{' '}
+              <strong>{filteredEmp ? `${filteredEmp.first_name} ${filteredEmp.last_name} (${filteredEmp.employee_code})` : `Employee #${filterEmployeeId}`}</strong>
+            </span>
+            <span style={{ background: '#dbeafe', padding: '2px 8px', borderRadius: '12px', fontSize: '12px', fontWeight: 600 }}>
+              {baseAllocations.length} allocations found
+            </span>
+          </div>
+          {onClearFilter && (
+            <button 
+              onClick={onClearFilter} 
+              className="btn-secondary" 
+              style={{ fontSize: '12px', padding: '4px 10px', height: 'auto', background: 'white' }}
+            >
+              ✕ Clear Filter (Show All)
+            </button>
+          )}
         </div>
       )}
 
@@ -230,16 +271,18 @@ const LeaveAllocationsView = () => {
                   </div>
                 </td>
               </tr>
-            ) : allocations.length === 0 ? (
+            ) : baseAllocations.length === 0 ? (
               <tr>
                 <td colSpan="8" style={{ textAlign: 'center', padding: '4rem 2rem', color: 'var(--text-secondary)' }}>
                   <div style={{ fontSize: '2.5rem', marginBottom: '0.75rem' }}>🏖️</div>
                   <div style={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--primary)', marginBottom: '0.25rem' }}>No Leave Allocations Found</div>
-                  <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>No employee leave allowances have been granted in the database yet. Click "Grant Allocation" above to assign quotas.</div>
+                  <div style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+                    {filterEmployeeId ? 'No leave allocations granted for this employee yet.' : 'No employee leave allowances have been granted in the database yet. Click "Grant Allocation" above to assign quotas.'}
+                  </div>
                 </td>
               </tr>
             ) : (
-              allocations.map(a => {
+              baseAllocations.map(a => {
                 const empName = a.employee?.full_name || (a.employee ? `${a.employee.first_name} ${a.employee.last_name}` : `Employee #${a.employee_id}`);
                 const typeName = a.time_off_type?.name || 'Leave';
                 const status = (a.status || 'APPROVED').toUpperCase();
@@ -292,36 +335,32 @@ const LeaveAllocationsView = () => {
             <form onSubmit={handleGrant} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px', color: 'var(--text-primary)' }}>Select Employee *</label>
-                <select
-                  required
-                  className="control-select"
-                  style={{ width: '100%', height: '38px', borderRadius: '8px' }}
+                <EntityCombobox
                   value={formData.employeeId}
-                  onChange={e => setFormData({ ...formData, employeeId: e.target.value })}
-                >
-                  <option value="">-- Choose Employee --</option>
-                  {employees.map(emp => (
-                    <option key={emp.id} value={emp.id}>
-                      {emp.first_name} {emp.last_name} ({emp.employee_code}) · {emp.department_name || 'Staff'}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(id) => setFormData({ ...formData, employeeId: id ?? '' })}
+                  options={employees.map(emp => ({
+                    id: emp.id,
+                    label: `${emp.first_name} ${emp.last_name}`,
+                    sublabel: `${emp.employee_code} · ${emp.department_name || 'Staff'}`
+                  }))}
+                  placeholder="Search employee by name, code, or ID…"
+                  required
+                />
               </div>
 
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px', color: 'var(--text-primary)' }}>Time Off Type *</label>
-                <select
-                  required
-                  className="control-select"
-                  style={{ width: '100%', height: '38px', borderRadius: '8px' }}
+                <EntityCombobox
                   value={formData.typeId}
-                  onChange={e => setFormData({ ...formData, typeId: e.target.value })}
-                >
-                  <option value="">-- Choose Type --</option>
-                  {leaveTypes.map(t => (
-                    <option key={t.id} value={t.id}>{t.name}</option>
-                  ))}
-                </select>
+                  onChange={(id) => setFormData({ ...formData, typeId: id ?? '' })}
+                  options={leaveTypes.map(t => ({
+                    id: t.id,
+                    label: t.name,
+                    sublabel: t.code
+                  }))}
+                  placeholder="Choose leave type…"
+                  required
+                />
               </div>
 
               <div>

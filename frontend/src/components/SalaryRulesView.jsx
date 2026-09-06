@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { apiService } from '../services/apiService';
+import EntityCombobox from './EntityCombobox';
 
 const typeStyle = { 
   PERCENTAGE: { bg: '#eef7f7', text: '#005166' }, 
@@ -412,17 +413,13 @@ const SalaryRulesView = () => {
               {!editRule && (
                 <div>
                   <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 700, marginBottom: '5px', color: 'var(--text-secondary)', textTransform: 'uppercase' }}>Parent Salary Structure *</label>
-                  <select
-                    className="control-select"
-                    style={{ width: '100%', height: 38 }}
+                  <EntityCombobox
+                    options={structures.map(s => ({ id: s.id, label: s.name, sublabel: s.code }))}
                     value={formData.structureId}
-                    onChange={e => setFormData(f => ({ ...f, structureId: Number(e.target.value) }))}
+                    onChange={(val) => setFormData(f => ({ ...f, structureId: val ? Number(val) : '' }))}
+                    placeholder="Search or select salary structure..."
                     required
-                  >
-                    {structures.map(s => (
-                      <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
-                    ))}
-                  </select>
+                  />
                 </div>
               )}
 

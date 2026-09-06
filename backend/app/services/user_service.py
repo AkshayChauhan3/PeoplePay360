@@ -37,10 +37,19 @@ async def create_user(db: AsyncSession, data: UserCreate) -> User:
 
     role_id = data.role_id if data.role_id is not None else 1
 
+    from app.models.role import Role
+    role_res = await db.execute(select(Role).where(Role.id == role_id))
+    if role_res.scalar_one_or_none() is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Role with ID {role_id} does not exist.",
+        )
+
     user = User(
         email=data.email,
         password_hash=hash_password(data.password),
         role_id=role_id,
+        employee_id=data.employee_id,
         is_active=True,
     )
     db.add(user)

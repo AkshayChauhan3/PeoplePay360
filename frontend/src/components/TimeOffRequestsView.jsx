@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { apiService } from '../services/apiService';
+import EntityCombobox from './EntityCombobox';
 
 const statusStyle = {
   Pending: { bg: '#fff7ed', text: '#b45309' },
@@ -18,6 +19,7 @@ const normalizeReq = (r, idx) => {
   return {
     id: r.id || `TOR-00${idx + 1}`,
     rawId: r.id,
+    employeeId: r.employee_id || r.employee?.id ? Number(r.employee_id || r.employee?.id) : null,
     name: empName,
     dept: r.department || r.employee?.department?.name || 'Engineering',
     type: r.time_off_type?.name || r.leave_type_name || r.type || 'Annual Leave',
@@ -32,7 +34,7 @@ const normalizeReq = (r, idx) => {
   };
 };
 
-const TimeOffRequestsView = () => {
+const TimeOffRequestsView = ({ filterEmployeeId, onClearFilter, onNavigate, currentUser }) => {
   const [requests, setRequests] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [leaveTypes, setLeaveTypes] = useState([]);
@@ -66,6 +68,7 @@ const TimeOffRequestsView = () => {
         apiService.getLeaveRequests(),
         apiService.getDashboardSummary(),
         apiService.getEmployees({ limit: 100 }),
+        apiService.getEmployees({ limit: 500 }),
         apiService.getTimeOffTypes(),
       ]);
 
@@ -200,14 +203,20 @@ const TimeOffRequestsView = () => {
     document.body.removeChild(link);
   };
 
-  const filtered = filter === 'All' ? requests : requests.filter(r => r.status === filter);
-  const pendingCount = requests.filter(r => r.status === 'Pending').length;
-  const approvedCount = requests.filter(r => r.status === 'Approved').length;
-  const rejectedCount = requests.filter(r => r.status === 'Rejected').length;
+  const baseRequests = filterEmployeeId
+    ? requests.filter(r => r.employeeId === Number(filterEmployeeId))
+    : requests;
+
+  const filtered = filter === 'All' ? baseRequests : baseRequests.filter(r => r.status === filter);
+  const pendingCount = baseRequests.filter(r => r.status === 'Pending').length;
+  const approvedCount = baseRequests.filter(r => r.status === 'Approved').length;
+  const rejectedCount = baseRequests.filter(r => r.status === 'Rejected').length;
 
   const todayStr = new Date().toISOString().split('T')[0];
-  const activeTodayLeaves = requests.filter(r => r.status === 'Approved' && r.from <= todayStr && r.to >= todayStr).length;
+  const activeTodayLeaves = baseRequests.filter(r => r.status === 'Approved' && r.from <= todayStr && r.to >= todayStr).length;
   const onLeaveToday = summary?.on_leave_today ?? activeTodayLeaves;
+
+  const filteredEmp = filterEmployeeId ? employees.find(e => e.id === Number(filterEmployeeId)) : null;
 
   return (
     <>
@@ -235,6 +244,39 @@ const TimeOffRequestsView = () => {
       {toastMsg && (
         <div style={{ background: '#ecfdf5', border: '1px solid #10b981', color: '#065f46', padding: '10px 16px', borderRadius: '8px', marginBottom: '16px', fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span>✓</span> {toastMsg}
+        </div>
+      )}
+
+      {filterEmployeeId && (
+        <div style={{ 
+          background: '#eff6ff', 
+          border: '1px solid #bfdbfe', 
+          borderRadius: '8px', 
+          padding: '10px 16px', 
+          marginBottom: '16px', 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'space-between' 
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: '#1e40af' }}>
+            <span style={{ fontSize: '16px' }}>🌴</span>
+            <span>
+              Showing time-off requests filtered for{' '}
+              <strong>{filteredEmp ? `${filteredEmp.first_name} ${filteredEmp.last_name} (${filteredEmp.employee_code})` : `Employee #${filterEmployeeId}`}</strong>
+            </span>
+            <span style={{ background: '#dbeafe', padding: '2px 8px', borderRadius: '12px', fontSize: '12px', fontWeight: 600 }}>
+              {baseRequests.length} requests found
+            </span>
+          </div>
+          {onClearFilter && (
+            <button 
+              onClick={onClearFilter} 
+              className="btn-secondary" 
+              style={{ fontSize: '12px', padding: '4px 10px', height: 'auto', background: 'white' }}
+            >
+              ✕ Clear Filter (Show All)
+            </button>
+          )}
         </div>
       )}
 
@@ -375,36 +417,32 @@ const TimeOffRequestsView = () => {
               
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px', color: 'var(--text-primary)' }}>Select Employee *</label>
-                <select
-                  required
-                  className="control-select"
-                  style={{ width: '100%', height: '38px', borderRadius: '8px' }}
+                <EntityCombobox
                   value={newReq.employeeId}
-                  onChange={e => setNewReq({ ...newReq, employeeId: e.target.value })}
-                >
-                  <option value="">-- Choose Employee --</option>
-                  {employees.map(emp => (
-                    <option key={emp.id} value={emp.id}>
-                      {emp.first_name} {emp.last_name} ({emp.employee_code}) · {emp.department_name || 'Staff'}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(id) => setNewReq({ ...newReq, employeeId: id ?? '' })}
+                  options={employees.map(emp => ({
+                    id: emp.id,
+                    label: `${emp.first_name} ${emp.last_name}`,
+                    sublabel: `${emp.employee_code} · ${emp.department_name || 'Staff'}`
+                  }))}
+                  placeholder="Search employee by name, code, or ID…"
+                  required
+                />
               </div>
 
               <div>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, marginBottom: '4px', color: 'var(--text-primary)' }}>Time Off Type *</label>
-                <select 
+                <EntityCombobox
+                  value={newReq.typeId}
+                  onChange={(id) => setNewReq({ ...newReq, typeId: id ?? '' })}
+                  options={leaveTypes.map(t => ({
+                    id: t.id,
+                    label: t.name,
+                    sublabel: t.code
+                  }))}
+                  placeholder="Choose leave type…"
                   required
-                  className="control-select" 
-                  style={{ width: '100%', height: '38px', borderRadius: '8px' }}
-                  value={newReq.typeId} 
-                  onChange={e => setNewReq({ ...newReq, typeId: e.target.value })}
-                >
-                  <option value="">-- Choose Type --</option>
-                  {leaveTypes.map(t => (
-                    <option key={t.id} value={t.id}>{t.name}</option>
-                  ))}
-                </select>
+                />
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>

@@ -214,6 +214,16 @@ async def preview_payroll_eligibility(
                         employee_name=emp_name,
                     )
                 )
+            if not emp.bank_account_number or not emp.bank_name or not emp.ifsc_code:
+                warnings.append(
+                    PayrollWarningItem(
+                        type="WARNING",
+                        code="MISSING_BANK_DETAILS",
+                        message=f"Employee {emp_name} ({emp.employee_code}) is missing bank details (account number, bank name, or IFSC).",
+                        employee_id=emp.id,
+                        employee_name=emp_name,
+                    )
+                )
         else:
             ineligible.append(
                 IneligibleEmployeeItem(
@@ -405,6 +415,22 @@ async def audit_payrun_for_warnings(
                     type="WARNING",
                     code="NO_ATTENDANCE",
                     message=f"Employee {emp_name} has 0 logged attendance days in this period.",
+                    employee_id=ps.employee_id,
+                    employee_name=emp_name,
+                )
+            )
+
+        # Non-blocking check: Missing bank account details (Bug #4)
+        if ps.employee and (
+            not ps.employee.bank_account_number
+            or not ps.employee.bank_name
+            or not ps.employee.ifsc_code
+        ):
+            warnings.append(
+                PayrollWarningItem(
+                    type="WARNING",
+                    code="MISSING_BANK_DETAILS",
+                    message=f"Employee {emp_name} is missing bank details (account number, bank name, or IFSC).",
                     employee_id=ps.employee_id,
                     employee_name=emp_name,
                 )

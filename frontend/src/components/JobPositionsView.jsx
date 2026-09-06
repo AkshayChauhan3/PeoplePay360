@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { apiService } from '../services/apiService';
+import EntityCombobox from './EntityCombobox';
 
 /* ── level colour map ── */
 const levelColors = {
@@ -320,16 +321,13 @@ function NewPositionModal({ departments, editPos, onClose, onSaved }) {
           {/* Department */}
           <div>
             <label style={labelStyle}>Department *</label>
-            <select
-              style={inputStyle('department_id')}
+            <EntityCombobox
               value={form.department_id}
-              onChange={e => set('department_id', e.target.value)}
-            >
-              <option value="">— Select department —</option>
-              {departments.map(d => (
-                <option key={d.id} value={d.id}>{d.name}</option>
-              ))}
-            </select>
+              onChange={(id) => set('department_id', id ?? '')}
+              options={departments.map(d => ({ id: d.id, label: d.name, sublabel: d.code }))}
+              placeholder="Search or enter department ID…"
+              required
+            />
             {errors.department_id && <div style={{ fontSize: '0.72rem', color: '#dc2626', marginTop: '4px' }}>{errors.department_id}</div>}
           </div>
 

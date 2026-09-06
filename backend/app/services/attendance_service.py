@@ -100,6 +100,13 @@ def calculate_attendance_metrics(
     - Overtime = worked_minutes - expected_work_minutes (if > 0)
     - Non-working day (schedule_line is None) -> all worked minutes are overtime
     """
+    # Normalize tzinfo so aware and naive are safely comparable
+    if check_out is not None:
+        if check_in.tzinfo is not None and check_out.tzinfo is None:
+            check_out = check_out.replace(tzinfo=check_in.tzinfo)
+        elif check_in.tzinfo is None and check_out.tzinfo is not None:
+            check_in = check_in.replace(tzinfo=check_out.tzinfo)
+
     # 1. Open session (no check-out yet)
     if check_out is None:
         late_minutes = 0

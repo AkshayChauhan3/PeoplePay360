@@ -39,6 +39,16 @@ class ScheduleIn(BaseModel):
     lines: list[ScheduleLineIn] = Field(default_factory=list, description="Working day lines")
 
 
+class ScheduleUpdate(BaseModel):
+    """Payload for updating an existing working schedule."""
+
+    name: str | None = Field(default=None, min_length=2, max_length=100)
+    calendar_type: str | None = Field(default=None, max_length=50)
+    is_active: bool | None = None
+    lines: list[ScheduleLineIn] | None = None
+
+
+
 class ScheduleOut(BaseModel):
     """Public representation of a working schedule."""
 

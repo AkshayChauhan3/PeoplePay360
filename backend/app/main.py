@@ -20,8 +20,10 @@ from app.api import (
     salary_structures,
     schedules,
     time_off,
+    users,
 )
 from app.core.config import settings
+from app.db.database import AsyncSessionLocal
 from app.services import (
     role_service,
     schedule_service,
@@ -80,6 +82,7 @@ API_PREFIX = "/api/v1"
 
 app.include_router(health.router, prefix=API_PREFIX)
 app.include_router(auth.router, prefix=API_PREFIX)
+app.include_router(users.router, prefix=API_PREFIX)
 app.include_router(dashboard.router, prefix=API_PREFIX)
 app.include_router(roles.router, prefix=API_PREFIX)
 app.include_router(departments.router, prefix=API_PREFIX)

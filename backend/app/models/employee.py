@@ -1,67 +1,78 @@
 import enum
-import uuid
 from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING
 
-from sqlalchemy import (
-    Date,
-    DateTime,
-    Enum,
-    ForeignKey,
-    Integer,
-    String,
-    text,
-)
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Date, DateTime, Enum, ForeignKey, Integer, String, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
+# Prevent circular imports while keeping static type checking intact
 if TYPE_CHECKING:
     from app.models.attendance import Attendance
     from app.models.contract import Contract
     from app.models.department import Department
     from app.models.job_position import JobPosition
-    from app.models.schedule import Schedule
+    from app.models.schedule import WorkingSchedule
     from app.models.time_off import TimeOffAllocation, TimeOffRequest
     from app.models.user import User
 
 
-def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
-
-
 class EmployeeStatus(str, enum.Enum):
     """
-    Operational status of an employee in the system.
+    
+    Lifecycle status of an employee.
+
+    States:
+    - ACTIVE: Currently working, eligible for payroll, shifts, and attendance.
+    - INACTIVE: Temporarily paused (e.g., sabbatical or suspended).
+    - ON_LEAVE: Currently on approved extended leave.
+    - TERMINATED: Former employee. Record retained for historical payroll/tax compliance.
     """
+
     ACTIVE = "ACTIVE"
     INACTIVE = "INACTIVE"
     ON_LEAVE = "ON_LEAVE"
     TERMINATED = "TERMINATED"
 
 
+def _utcnow() -> datetime:
+    """Helper returning current timestamp in UTC timezone."""
+    return datetime.now(timezone.utc)
+
+
 class Employee(Base):
     """
-    Employee master record matching PostgreSQL table schema.
+    Central HR Business Entity representing an actual person working in the company.
+
+    This model serves as the root hub for all future HR/payroll modules:
+    - Contracts (future Phase 3)
+    - Attendance & Shifts (future Phase 4)
+    - Salary Structures & Payslips (future Phase 5)
     """
 
     __tablename__ = "employees"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+    # ------------------------------------------------------------------
+    # Primary Key & Identifiers
+    # ------------------------------------------------------------------
+    id: Mapped[int] = mapped_column(
+        Integer,
         primary_key=True,
-        server_default=text("gen_random_uuid()"),
-        default=uuid.uuid4,
+        autoincrement=True,
     )
 
+    # Unique organizational code (e.g. "EMP001", "EMP002"). Indexed for quick search.
     employee_code: Mapped[str] = mapped_column(
         String(50),
         unique=True,
-        nullable=False,
         index=True,
+        nullable=False,
     )
 
+    # ------------------------------------------------------------------
+    # Personal & Contact Information
+    # ------------------------------------------------------------------
     first_name: Mapped[str] = mapped_column(
         String(100),
         nullable=False,
@@ -72,11 +83,12 @@ class Employee(Base):
         nullable=False,
     )
 
+    # Work email address; unique across the employee database.
     email: Mapped[str] = mapped_column(
         String(255),
         unique=True,
-        nullable=False,
         index=True,
+        nullable=False,
     )
 
     phone: Mapped[str | None] = mapped_column(
@@ -94,43 +106,48 @@ class Employee(Base):
         nullable=False,
     )
 
+    # ------------------------------------------------------------------
+    # Organizational Foreign Keys
+    # ------------------------------------------------------------------
+    # Department the employee belongs to.
     department_id: Mapped[int] = mapped_column(
         Integer,
-        ForeignKey("departments.id", name="fk_employees_department_id"),
-        nullable=False,
+        ForeignKey("departments.id"),
         index=True,
+        nullable=False,
     )
 
+    # Job title / organizational position held by the employee.
     job_position_id: Mapped[int] = mapped_column(
         Integer,
-        ForeignKey("job_positions.id", name="fk_employees_job_position_id"),
+        ForeignKey("job_positions.id"),
+        index=True,
         nullable=False,
-        index=True,
-    )
-
-    manager_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("employees.id", name="fk_employees_manager_id"),
-        nullable=True,
-        index=True,
-    )
-
-    status: Mapped[EmployeeStatus] = mapped_column(
-        Enum(EmployeeStatus, name="employeestatus", create_type=False),
-        nullable=False,
-        default=EmployeeStatus.ACTIVE,
-        server_default=text("'ACTIVE'"),
-    )
-
-    working_schedule_id: Mapped[int | None] = mapped_column(
-        Integer,
-        ForeignKey("working_schedules.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
     )
 
     # ------------------------------------------------------------------
-    # Banking & Financial Details (Phase 8: Corporate Payout)
+    # Self-Referencing Manager Hierarchy
+    # ------------------------------------------------------------------
+    # A manager is simply another employee.
+    # Nullable because top-level executives (e.g. CEO) have no manager.
+    manager_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("employees.id"),
+        index=True,
+        nullable=True,
+    )
+
+    # Working schedule assigned to this employee (nullable, defaults to system default schedule if null).
+    working_schedule_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("working_schedules.id", ondelete="SET NULL"),
+        index=True,
+        nullable=True,
+        default=None,
+    )
+
+    # ------------------------------------------------------------------
+    # Banking & Financial Details (Corporate Payout)
     # ------------------------------------------------------------------
     bank_name: Mapped[str | None] = mapped_column(
         String(100),
@@ -156,70 +173,105 @@ class Employee(Base):
         String(100),
         nullable=True,
     )
+
+    # ------------------------------------------------------------------
+    # Lifecycle Status
+    # ------------------------------------------------------------------
+    status: Mapped[EmployeeStatus] = mapped_column(
+        Enum(EmployeeStatus, name="employeestatus", create_type=True),
+        default=EmployeeStatus.ACTIVE,
+        server_default=EmployeeStatus.ACTIVE.value,
+        nullable=False,
+    )
+
+    # ------------------------------------------------------------------
+    # Audit Timestamps
+    # ------------------------------------------------------------------
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        nullable=False,
         default=_utcnow,
         server_default=text("now()"),
+        nullable=False,
     )
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        nullable=False,
         default=_utcnow,
         onupdate=_utcnow,
         server_default=text("now()"),
+        nullable=False,
     )
 
+    # ------------------------------------------------------------------
     # Relationships
+    # ------------------------------------------------------------------
+    # Eagerly loads Department metadata (name, code) with selectin
     department: Mapped["Department"] = relationship(
         "Department",
-        foreign_keys=[department_id],
         back_populates="employees",
+        foreign_keys=[department_id],
+        lazy="selectin",
     )
 
+    # Eagerly loads JobPosition metadata with selectin
     job_position: Mapped["JobPosition"] = relationship(
         "JobPosition",
-        foreign_keys=[job_position_id],
         back_populates="employees",
+        lazy="selectin",
     )
 
+    # Self-referential relationship pointing upwards to the manager.
+    # `remote_side="Employee.id"` tells SQLAlchemy that the 'parent' side
+    # of the relationship is identified by the target table's primary key.
     manager: Mapped["Employee | None"] = relationship(
         "Employee",
-        remote_side=[id],
+        remote_side="Employee.id",
         foreign_keys=[manager_id],
+        back_populates="subordinates",
+        lazy="selectin",
     )
 
-    schedule: Mapped["Schedule | None"] = relationship(
-        "Schedule",
-        foreign_keys=[working_schedule_id],
-        lazy="joined",
+    # Self-referential collection of direct reports (subordinates).
+    subordinates: Mapped[list["Employee"]] = relationship(
+        "Employee",
+        foreign_keys=[manager_id],
+        back_populates="manager",
     )
 
+    # 1:1 bidirectional link to User authentication account (if linked).
     user: Mapped["User | None"] = relationship(
         "User",
         back_populates="employee",
         uselist=False,
     )
 
+    # 1:N relationship: all employment contracts for this employee
     contracts: Mapped[list["Contract"]] = relationship(
         "Contract",
         back_populates="employee",
-        cascade="all, delete-orphan",
     )
 
+    # Assigned working schedule
+    working_schedule: Mapped["WorkingSchedule | None"] = relationship(
+        "WorkingSchedule",
+        lazy="selectin",
+    )
+
+    # 1:N relationship: employee attendance records
     attendances: Mapped[list["Attendance"]] = relationship(
         "Attendance",
         back_populates="employee",
         cascade="all, delete-orphan",
     )
 
+    # 1:N relationship: employee leave allocations
     time_off_allocations: Mapped[list["TimeOffAllocation"]] = relationship(
         "TimeOffAllocation",
         back_populates="employee",
         cascade="all, delete-orphan",
     )
 
+    # 1:N relationship: employee leave requests
     time_off_requests: Mapped[list["TimeOffRequest"]] = relationship(
         "TimeOffRequest",
         back_populates="employee",
@@ -228,11 +280,23 @@ class Employee(Base):
 
     @property
     def full_name(self) -> str:
+        """Convenience property concatenating first and last name."""
         return f"{self.first_name} {self.last_name}"
 
     @property
-    def is_active(self) -> bool:
-        return self.status != EmployeeStatus.TERMINATED
+    def job_title(self) -> str | None:
+        """Convenience property returning job position name."""
+        return self.job_position.name if self.job_position else None
+
+    @property
+    def user_id(self) -> int | None:
+        """Convenience property returning linked User account ID."""
+        return self.user.id if self.user else None
+
+    @property
+    def user_email(self) -> str | None:
+        """Convenience property returning linked User account email."""
+        return self.user.email if self.user else None
 
     def __repr__(self) -> str:
         return f"<Employee id={self.id} code={self.employee_code!r} name={self.full_name!r}>"

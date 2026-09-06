@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     refresh_token_expire_days: int = 7
 
     # CORS — comma-separated origins, e.g. "http://localhost:3000,https://app.example.com"
-    cors_origins: str = "http://localhost:3000"
+    cors_origins: str = "http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173"
 
     # SMTP / Email Delivery
     smtp_host: str = ""
@@ -43,9 +43,20 @@ class Settings(BaseSettings):
     smtp_mock_delivery: bool = True
     company_name: str = "PeoplePay360 Technologies Pvt Ltd"
 
+    # Email & Storage Hardening (Phase 8.1)
+    email_provider_backend: str = "smtp"  # "smtp", "ses", "mock"
+    storage_backend: str = "local"         # "local", "s3"
+    storage_local_dir: str = "storage/payslips"
+    redis_url: str = "redis://localhost:6379/0"
+    redis_enabled: bool = False
+    email_max_retries: int = 3
+    email_retry_backoff_seconds: int = 5
+    email_queue_name: str = "arq:queue"
+    auto_email_on_payrun_paid: bool = False
+
     # Application
     app_env: str = "development"
-    app_version: str = "0.0.9"
+    app_version: str = "0.0.10"
 
     @property
     def is_smtp_configured(self) -> bool:

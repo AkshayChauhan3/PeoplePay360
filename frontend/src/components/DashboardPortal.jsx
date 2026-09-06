@@ -2,9 +2,123 @@ import React, { useState, useEffect } from 'react';
 import { apiService } from '../services/apiService';
 import { ROLE_LABELS } from '../utils/rbac';
 
+const DashboardFilterBar = ({
+  departments,
+  selectedDept,
+  onSelectDept,
+  selectedStatus,
+  onSelectStatus,
+  periodStart,
+  onPeriodStartChange,
+  periodEnd,
+  onPeriodEndChange,
+  onReset,
+}) => (
+  <div style={{
+    display: 'flex',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '12px',
+    backgroundColor: '#fff',
+    padding: '12px 18px',
+    borderRadius: '10px',
+    border: '1px solid var(--border-structural)',
+    marginBottom: '20px',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+  }}>
+    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '10px' }}>
+      <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+        Filter Telemetry:
+      </span>
+      
+      {/* Department Filter */}
+      <select
+        className="control-select"
+        style={{ height: '34px', fontSize: '12px', minWidth: '160px' }}
+        value={selectedDept}
+        onChange={e => onSelectDept(e.target.value)}
+      >
+        <option value="">All Departments ({departments.length})</option>
+        {departments.map(d => (
+          <option key={d.id} value={d.id}>{d.name}</option>
+        ))}
+      </select>
+
+      {/* Employee Status Filter */}
+      <select
+        className="control-select"
+        style={{ height: '34px', fontSize: '12px', minWidth: '140px' }}
+        value={selectedStatus}
+        onChange={e => onSelectStatus(e.target.value)}
+      >
+        <option value="">All Statuses</option>
+        <option value="ACTIVE">Active Workforce</option>
+        <option value="ON_LEAVE">On Leave</option>
+        <option value="INACTIVE">Inactive</option>
+      </select>
+    </div>
+
+    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '10px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>From:</span>
+        <input
+          type="date"
+          className="form-input"
+          style={{ height: '34px', fontSize: '12px', padding: '2px 8px' }}
+          value={periodStart}
+          onChange={e => onPeriodStartChange(e.target.value)}
+        />
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>To:</span>
+        <input
+          type="date"
+          className="form-input"
+          style={{ height: '34px', fontSize: '12px', padding: '2px 8px' }}
+          value={periodEnd}
+          onChange={e => onPeriodEndChange(e.target.value)}
+        />
+      </div>
+      {(selectedDept || selectedStatus || periodStart || periodEnd) && (
+        <button
+          onClick={onReset}
+          style={{
+            height: '34px',
+            padding: '0 12px',
+            fontSize: '11px',
+            fontWeight: 600,
+            border: '1px solid #cbd5e1',
+            borderRadius: '6px',
+            background: '#f8fafc',
+            cursor: 'pointer',
+            color: '#475569',
+          }}
+        >
+          Reset Filters
+        </button>
+      )}
+    </div>
+  </div>
+);
+
 const DashboardPortal = ({ onNavigate, currentUser }) => {
   const userRole = (currentUser?.role || 'ADMIN').toUpperCase();
   const displayName = currentUser?.full_name || (currentUser?.email ? currentUser.email.split('@')[0] : 'User');
+
+  // Filtering state
+  const [selectedDept, setSelectedDept] = useState('');
+  const [selectedStatus, setSelectedStatus] = useState('');
+  const [periodStart, setPeriodStart] = useState('');
+  const [periodEnd, setPeriodEnd] = useState('');
+  const [departmentsList, setDepartmentsList] = useState([]);
+
+  const handleResetFilters = () => {
+    setSelectedDept('');
+    setSelectedStatus('');
+    setPeriodStart('');
+    setPeriodEnd('');
+  };
 
   // Live Summary state populated directly from backend /api/v1/dashboard/summary
   const [summary, setSummary] = useState({
@@ -15,10 +129,16 @@ const DashboardPortal = ({ onNavigate, currentUser }) => {
     expiringContracts: 0,
     draftContracts: 0,
     attendanceRate: '0%',
+    coverageRate: '0%',
     alertsCount: 0,
     presentToday: 0,
     onTimeToday: 0,
     lateToday: 0,
+    absentToday: 0,
+    incompleteToday: 0,
+    halfDayToday: 0,
+    overtimeMinutes: 0,
+    manualEdits: 0,
     onLeaveToday: 0,
     openJobs: 0,
     activeDeptsCount: 0,
@@ -48,11 +168,23 @@ const DashboardPortal = ({ onNavigate, currentUser }) => {
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
-        const [summaryRes, leaveReqsRes, sessionRes] = await Promise.allSettled([
-          apiService.getDashboardSummary(),
+        const params = {};
+        if (selectedDept) params.department_id = selectedDept;
+        if (selectedStatus) params.status = selectedStatus;
+        if (periodStart) params.period_start = periodStart;
+        if (periodEnd) params.period_end = periodEnd;
+
+        const [summaryRes, leaveReqsRes, sessionRes, deptsRes] = await Promise.allSettled([
+          apiService.getDashboardSummary(params),
           apiService.getLeaveRequests(),
           apiService.getAttendanceSession(),
+          apiService.getDepartments(),
         ]);
+
+        if (deptsRes.status === 'fulfilled' && deptsRes.value) {
+          const rawD = deptsRes.value?.items || (Array.isArray(deptsRes.value) ? deptsRes.value : []);
+          setDepartmentsList(rawD);
+        }
 
         if (sessionRes.status === 'fulfilled' && sessionRes.value) {
           const sess = sessionRes.value;
@@ -81,10 +213,16 @@ const DashboardPortal = ({ onNavigate, currentUser }) => {
             expiringContracts: data.expiring_contracts ?? 0,
             draftContracts: data.draft_contracts ?? 0,
             attendanceRate: data.attendance_rate !== undefined ? `${data.attendance_rate}%` : '0%',
+            coverageRate: data.coverage_rate !== undefined ? `${data.coverage_rate}%` : '0%',
             alertsCount: data.pending_leave_requests ?? 0,
             presentToday: data.present_today ?? 0,
             onTimeToday: data.on_time_today ?? 0,
             lateToday: data.late_today ?? 0,
+            absentToday: data.absent_today ?? 0,
+            incompleteToday: data.incomplete_today ?? 0,
+            halfDayToday: data.half_day_today ?? 0,
+            overtimeMinutes: data.overtime_minutes ?? 0,
+            manualEdits: data.manual_edits ?? 0,
             onLeaveToday: data.on_leave_today ?? 0,
             openJobs: data.open_jobs ?? 0,
             activeDeptsCount: data.active_depts_count ?? 0,
@@ -117,7 +255,7 @@ const DashboardPortal = ({ onNavigate, currentUser }) => {
       }
     };
     fetchDashboardData();
-  }, []);
+  }, [selectedDept, selectedStatus, periodStart, periodEnd]);
 
   const handleApproveLeave = async (id) => {
     try {
@@ -196,6 +334,20 @@ const DashboardPortal = ({ onNavigate, currentUser }) => {
           </div>
         </div>
 
+        {/* Telemetry Filter Bar */}
+        <DashboardFilterBar
+          departments={departmentsList}
+          selectedDept={selectedDept}
+          onSelectDept={setSelectedDept}
+          selectedStatus={selectedStatus}
+          onSelectStatus={setSelectedStatus}
+          periodStart={periodStart}
+          onPeriodStartChange={setPeriodStart}
+          periodEnd={periodEnd}
+          onPeriodEndChange={setPeriodEnd}
+          onReset={handleResetFilters}
+        />
+
         {/* Executive KPIs */}
         <div className="kpi-grid">
           <div className="kpi-card" onClick={() => onNavigate('payruns')} style={{ cursor: 'pointer' }} title="Click to view Payruns">
@@ -216,11 +368,14 @@ const DashboardPortal = ({ onNavigate, currentUser }) => {
           </div>
 
           <div className="kpi-card" onClick={() => onNavigate('attendance_records')} style={{ cursor: 'pointer' }} title="Click to view Attendance">
-            <div className="kpi-title">Attendance Integrity</div>
+            <div className="kpi-title">Attendance Integrity & Coverage</div>
             <div className="kpi-value-row">
               <span className="kpi-value tabular-nums">{summary.attendanceRate}</span>
+              <span className="kpi-badge positive">{summary.coverageRate} Coverage</span>
             </div>
-            <div className="kpi-subtext">{summary.presentToday} Present Today · View Attendance →</div>
+            <div className="kpi-subtext">
+              {summary.presentToday} Present · {summary.absentToday} Absent · {(summary.overtimeMinutes / 60).toFixed(1)}h OT →
+            </div>
           </div>
 
           <div className="kpi-card" onClick={() => onNavigate('time_off_requests')} style={{ cursor: 'pointer' }} title="Click to view Requests">
@@ -309,19 +464,38 @@ const DashboardPortal = ({ onNavigate, currentUser }) => {
           </div>
 
           <div className="card-panel">
-            <div className="panel-title">Attendance & Presence Health</div>
-            <div className="donut-container">
-              <div className="donut">
-                <div className="donut-inner">
-                  <div className="donut-inner-value tabular-nums">{summary.headcount}</div>
-                  <div className="donut-inner-label">Total</div>
-                </div>
+            <div className="panel-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span>Attendance & Shift Telemetry</span>
+              <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Coverage {summary.coverageRate}</span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', padding: '6px 0', fontSize: '12px' }}>
+              <div style={{ padding: '6px 8px', background: '#f0fdf4', borderRadius: '6px', border: '1px solid #bbf7d0' }}>
+                <div style={{ color: '#166534', fontWeight: 600 }}>On Time</div>
+                <div style={{ fontSize: '16px', fontWeight: 800, color: '#15803d' }}>{summary.onTimeToday}</div>
               </div>
-              <div className="donut-legend">
-                <div className="legend-item"><div className="legend-dot" style={{ background: 'var(--success)' }}></div>On Time <span className="tabular-nums">{summary.onTimeToday}</span></div>
-                <div className="legend-item"><div className="legend-dot" style={{ background: '#b45309' }}></div>Late <span className="tabular-nums">{summary.lateToday}</span></div>
-                <div className="legend-item"><div className="legend-dot" style={{ background: 'var(--secondary)' }}></div>On-Leave <span className="tabular-nums">{summary.onLeaveToday}</span></div>
+              <div style={{ padding: '6px 8px', background: '#fffbeb', borderRadius: '6px', border: '1px solid #fde68a' }}>
+                <div style={{ color: '#92400e', fontWeight: 600 }}>Late Arrivals</div>
+                <div style={{ fontSize: '16px', fontWeight: 800, color: '#b45309' }}>{summary.lateToday}</div>
               </div>
+              <div style={{ padding: '6px 8px', background: '#fef2f2', borderRadius: '6px', border: '1px solid #fecaca' }}>
+                <div style={{ color: '#991b1b', fontWeight: 600 }}>Absent</div>
+                <div style={{ fontSize: '16px', fontWeight: 800, color: '#dc2626' }}>{summary.absentToday}</div>
+              </div>
+              <div style={{ padding: '6px 8px', background: '#faf5ff', borderRadius: '6px', border: '1px solid #e9d5ff' }}>
+                <div style={{ color: '#6b21a8', fontWeight: 600 }}>On Leave</div>
+                <div style={{ fontSize: '16px', fontWeight: 800, color: '#7e22ce' }}>{summary.onLeaveToday}</div>
+              </div>
+              <div style={{ padding: '6px 8px', background: '#f8fafc', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                <div style={{ color: '#475569', fontWeight: 600 }}>Incomplete Shifts</div>
+                <div style={{ fontSize: '16px', fontWeight: 800, color: '#334155' }}>{summary.incompleteToday}</div>
+              </div>
+              <div style={{ padding: '6px 8px', background: '#f8fafc', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                <div style={{ color: '#475569', fontWeight: 600 }}>Overtime Logged</div>
+                <div style={{ fontSize: '16px', fontWeight: 800, color: '#0f766e' }}>{(summary.overtimeMinutes / 60).toFixed(1)} hrs</div>
+              </div>
+            </div>
+            <div style={{ fontSize: '11px', color: '#64748b', marginTop: '6px', textAlign: 'right' }}>
+              Manual supervisor edits: <strong>{summary.manualEdits}</strong>
             </div>
           </div>
 
@@ -385,6 +559,20 @@ const DashboardPortal = ({ onNavigate, currentUser }) => {
           </div>
         </div>
 
+        {/* Telemetry Filter Bar */}
+        <DashboardFilterBar
+          departments={departmentsList}
+          selectedDept={selectedDept}
+          onSelectDept={setSelectedDept}
+          selectedStatus={selectedStatus}
+          onSelectStatus={setSelectedStatus}
+          periodStart={periodStart}
+          onPeriodStartChange={setPeriodStart}
+          periodEnd={periodEnd}
+          onPeriodEndChange={setPeriodEnd}
+          onReset={handleResetFilters}
+        />
+
         {/* HR Manager Workforce KPIs */}
         <div className="kpi-grid">
           <div className="kpi-card" onClick={() => onNavigate('directory')} style={{ cursor: 'pointer' }}>
@@ -396,11 +584,14 @@ const DashboardPortal = ({ onNavigate, currentUser }) => {
           </div>
 
           <div className="kpi-card" onClick={() => onNavigate('attendance_records')} style={{ cursor: 'pointer' }}>
-            <div className="kpi-title">Today's Check-In Rate</div>
+            <div className="kpi-title">Today's Check-In & Coverage</div>
             <div className="kpi-value-row">
               <span className="kpi-value tabular-nums">{summary.attendanceRate}</span>
+              <span className="kpi-badge positive">{summary.coverageRate} Coverage</span>
             </div>
-            <div className="kpi-subtext">{summary.presentToday} Present · {summary.onLeaveToday} On-Leave · View Logs →</div>
+            <div className="kpi-subtext">
+              {summary.presentToday} Present · {summary.absentToday} Absent · {summary.onLeaveToday} On-Leave →
+            </div>
           </div>
 
           <div className="kpi-card" onClick={() => onNavigate('time_off_requests')} style={{ cursor: 'pointer' }}>

@@ -8,6 +8,7 @@ from sqlalchemy.orm import selectinload
 
 from app.models.schedule import WorkingSchedule, WorkingScheduleDay
 from app.schemas.schedule import ScheduleIn
+from app.schemas.schedule import ScheduleIn, ScheduleUpdate
 
 
 def _schedule_query():
@@ -122,6 +123,82 @@ async def create_schedule(db: AsyncSession, data: ScheduleIn) -> WorkingSchedule
     await db.flush()
 
     return await get_schedule_by_id(db, schedule.id)  # type: ignore[return-value]
+
+
+async def update_schedule(
+    db: AsyncSession,
+    schedule_id: int,
+    data: ScheduleUpdate,
+) -> WorkingSchedule:
+    """Update an existing WorkingSchedule and optionally replace lines."""
+    sched = await get_schedule_by_id(db, schedule_id)
+    if sched is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Working schedule with ID {schedule_id} does not exist.",
+        )
+
+    if data.name is not None and data.name.strip() != sched.name:
+        existing = await get_schedule_by_name(db, data.name.strip())
+        if existing and existing.id != schedule_id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Working schedule '{data.name}' already exists.",
+            )
+        sched.name = data.name.strip()
+
+    if data.calendar_type is not None:
+        sched.calendar_type = data.calendar_type.strip()
+
+    if data.is_active is not None:
+        sched.is_active = data.is_active
+
+    if data.lines is not None:
+        days_seen = set()
+        total_hours = Decimal("0.00")
+        line_objects = []
+
+        for line_in in data.lines:
+            if line_in.day_of_week in days_seen:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    detail=f"Duplicate day_of_week {line_in.day_of_week} in schedule lines.",
+                )
+            days_seen.add(line_in.day_of_week)
+
+            wh = _compute_line_work_hours(line_in.start_time, line_in.end_time, line_in.break_minutes)
+            total_hours += wh
+            line_objects.append(
+                WorkingScheduleDay(
+                    schedule_id=sched.id,
+                    day_of_week=line_in.day_of_week,
+                    start_time=line_in.start_time,
+                    end_time=line_in.end_time,
+                    break_minutes=line_in.break_minutes,
+                    work_hours=wh,
+                )
+            )
+
+        sched.lines.clear()
+        await db.flush()
+        sched.lines.extend(line_objects)
+        sched.hours_per_week = total_hours
+        sched.days_per_week = len(line_objects)
+
+    await db.flush()
+    return await get_schedule_by_id(db, schedule_id)  # type: ignore[return-value]
+
+
+async def delete_schedule(db: AsyncSession, schedule_id: int) -> None:
+    """Delete a WorkingSchedule."""
+    sched = await get_schedule_by_id(db, schedule_id)
+    if sched is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Working schedule with ID {schedule_id} does not exist.",
+        )
+    await db.delete(sched)
+    await db.flush()
 
 
 async def seed_default_schedule(db: AsyncSession) -> WorkingSchedule:

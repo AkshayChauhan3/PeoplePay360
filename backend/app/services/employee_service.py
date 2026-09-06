@@ -15,9 +15,11 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.models.contract import Contract, ContractStatus
 from app.models.department import Department
 from app.models.employee import Employee, EmployeeStatus
 from app.models.job_position import JobPosition
+from app.models.schedule import WorkingSchedule
 from app.models.user import User
 from app.schemas.employee import EmployeeCreate, EmployeeUpdate
 
@@ -27,13 +29,14 @@ def _employee_query():
     Constructs the base SELECT query with eager relationship loading.
 
     `selectinload` instructs SQLAlchemy to load the foreign relations
-    (department, job_position, manager) in a batch query, eliminating
+    (department, job_position, manager, user) in a batch query, eliminating
     the classic N+1 query performance pitfall.
     """
     return select(Employee).options(
-        selectinload(Employee.department),
+        selectinload(Employee.department).selectinload(Department.manager),
         selectinload(Employee.job_position),
         selectinload(Employee.manager),
+        selectinload(Employee.user),
     )
 
 
@@ -115,6 +118,16 @@ async def create_employee(db: AsyncSession, data: EmployeeCreate) -> Employee:
             )
 
     # 4. Employee code uniqueness verification
+    # 4. Working schedule verification (if assigned)
+    if data.working_schedule_id is not None:
+        sched = await db.scalar(select(WorkingSchedule).where(WorkingSchedule.id == data.working_schedule_id))
+        if sched is None or not sched.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Working schedule with ID {data.working_schedule_id} does not exist or is inactive.",
+            )
+
+    # 5. Employee code uniqueness verification
     if await get_employee_by_code(db, data.employee_code) is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -122,11 +135,27 @@ async def create_employee(db: AsyncSession, data: EmployeeCreate) -> Employee:
         )
 
     # 5. Work email uniqueness verification
+    # 6. Work email uniqueness verification
     if await get_employee_by_email(db, data.email) is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Employee with email '{data.email}' already exists.",
         )
+
+    # 7. User link verification (if specified)
+    target_user = None
+    if data.user_id is not None:
+        target_user = await db.scalar(select(User).where(User.id == data.user_id))
+        if target_user is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"User account with ID {data.user_id} does not exist.",
+            )
+        if target_user.employee_id is not None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"User account {data.user_id} is already linked to employee ID {target_user.employee_id}.",
+            )
 
     employee = Employee(
         employee_code=data.employee_code,
@@ -139,6 +168,7 @@ async def create_employee(db: AsyncSession, data: EmployeeCreate) -> Employee:
         department_id=data.department_id,
         job_position_id=data.job_position_id,
         manager_id=data.manager_id,
+        working_schedule_id=data.working_schedule_id,
         status=data.status,
         bank_name=data.bank_name,
         bank_account_number=data.bank_account_number,
@@ -148,6 +178,10 @@ async def create_employee(db: AsyncSession, data: EmployeeCreate) -> Employee:
     )
     db.add(employee)
     await db.flush()
+
+    if target_user is not None:
+        target_user.employee_id = employee.id
+        await db.flush()
 
     # Re-fetch with eager relationships loaded to satisfy response schema
     result = await get_employee_by_id(db, employee.id)
@@ -298,6 +332,19 @@ async def update_employee(db: AsyncSession, employee_id: int, data: EmployeeUpda
             )
         employee.email = data.email.lower()
 
+    # 6. Validate working schedule if changed
+    if data.working_schedule_id is not None:
+        if data.working_schedule_id == 0:
+            employee.working_schedule_id = None
+        else:
+            sched = await db.scalar(select(WorkingSchedule).where(WorkingSchedule.id == data.working_schedule_id))
+            if sched is None or not sched.is_active:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Working schedule with ID {data.working_schedule_id} does not exist or is inactive.",
+                )
+            employee.working_schedule_id = data.working_schedule_id
+
     if data.first_name is not None:
         employee.first_name = data.first_name
     if data.last_name is not None:
@@ -337,6 +384,7 @@ async def deactivate_employee(db: AsyncSession, employee_id: int) -> Employee:
     Soft-deactivate an employee by setting status to TERMINATED.
 
     Historical payroll, contracts, and attendance data remain preserved.
+    Any RUNNING contracts for the employee are automatically marked CANCELLED.
     """
     employee = await get_employee_by_id(db, employee_id)
     if employee is None:
@@ -345,6 +393,17 @@ async def deactivate_employee(db: AsyncSession, employee_id: int) -> Employee:
             detail=f"Employee with ID {employee_id} not found.",
         )
     employee.status = EmployeeStatus.TERMINATED
+
+    # Auto-cancel any RUNNING contracts for this employee (Bug #6)
+    contract_res = await db.execute(
+        select(Contract).where(
+            Contract.employee_id == employee_id,
+            Contract.status == ContractStatus.RUNNING,
+        )
+    )
+    for contract in contract_res.scalars().all():
+        contract.status = ContractStatus.CANCELLED
+
     await db.flush()
     res = await get_employee_by_id(db, employee_id)
     assert res is not None
@@ -403,3 +462,24 @@ async def link_user(db: AsyncSession, employee_id: int, user_id: int) -> Employe
     res = await get_employee_by_id(db, employee_id)
     assert res is not None
     return res
+
+
+async def unlink_user(db: AsyncSession, employee_id: int) -> Employee:
+    """
+    Unlink the existing User account associated with this Employee.
+    """
+    employee = await get_employee_by_id(db, employee_id)
+    if employee is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Employee with ID {employee_id} not found.",
+        )
+    user = await db.scalar(select(User).where(User.employee_id == employee_id))
+    if user is not None:
+        user.employee_id = None
+        await db.flush()
+
+    res = await get_employee_by_id(db, employee_id)
+    assert res is not None
+    return res
+

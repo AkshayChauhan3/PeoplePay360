@@ -116,7 +116,7 @@ async def create_employee(
 async def list_employees(
     response: Response,
     skip: int = Query(default=0, ge=0, description="Pagination offset"),
-    limit: int = Query(default=50, ge=1, le=100, description="Items per page"),
+    limit: int = Query(default=50, ge=1, le=1000, description="Items per page"),
     search: str | None = Query(default=None, description="Search by name, code, or email"),
     department_id: int | None = Query(default=None, description="Filter by department ID"),
     job_position_id: int | None = Query(default=None, description="Filter by job position ID"),
@@ -448,6 +448,20 @@ async def link_user_to_employee(
     - One user account may be linked to at most one employee.
     """
     return await employee_service.link_user(db, employee_id, data.user_id)
+
+
+@router.delete(
+    "/{employee_id}/user",
+    response_model=EmployeeResponse,
+    summary="Unlink user account from this employee",
+)
+async def unlink_user_from_employee(
+    employee_id: int,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_master_data_admin()),
+) -> Employee:
+    """Unlink the user login account currently associated with this employee."""
+    return await employee_service.unlink_user(db, employee_id)
 
 
 # ---------------------------------------------------------------------------

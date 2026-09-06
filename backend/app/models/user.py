@@ -1,10 +1,8 @@
 import enum
-import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, text
-from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -66,8 +64,8 @@ class User(Base):
     # 1. System administrators might have accounts without an HR employee record.
     # 2. A user might be registered before being linked to their HR profile.
     # `unique=True` guarantees that one Employee can only ever have ONE User account.
-    employee_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
+    employee_id: Mapped[int | None] = mapped_column(
+        Integer,
         ForeignKey("employees.id"),
         unique=True,
         index=True,
@@ -147,10 +145,10 @@ class User(Base):
         lazy="selectin",
     )
 
-    # 1:1 link to Employee via employee_id. `uselist=False` enforces scalar relation.
+    # 1:1 bidirectional link to Employee. `uselist=False` enforces scalar relation.
     employee: Mapped["Employee | None"] = relationship(
         "Employee",
-        foreign_keys=[employee_id],
+        back_populates="user",
         lazy="selectin",
         uselist=False,
     )

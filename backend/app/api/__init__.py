@@ -14,6 +14,7 @@ from app.api import (
     salary_structures,
     schedules,
     time_off,
+    users,
 )
 
 __all__ = [
@@ -32,6 +33,7 @@ __all__ = [
     "salary_structures",
     "schedules",
     "time_off",
+    "users",
 ]
 
 

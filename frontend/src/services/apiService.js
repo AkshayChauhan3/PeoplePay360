@@ -62,6 +62,42 @@ export const apiService = {
     return await apiClient.delete(`/api/v1/employees/${id}`);
   },
 
+  async getUsers(params = {}) {
+    const query = new URLSearchParams(params).toString();
+    return await apiClient.get(`/api/v1/users${query ? `?${query}` : ''}`);
+  },
+
+  async linkUserToEmployee(employeeId, userId) {
+    return await apiClient.post(`/api/v1/employees/${employeeId}/user`, { user_id: Number(userId) });
+  },
+
+  async unlinkUserFromEmployee(employeeId) {
+    return await apiClient.delete(`/api/v1/employees/${employeeId}/user`);
+  },
+
+  async getEmployeeContracts(employeeId) {
+    return await apiClient.get(`/api/v1/employees/${employeeId}/contracts`);
+  },
+
+  async getEmployeeAttendance(employeeId, params = {}) {
+    const query = new URLSearchParams(params).toString();
+    return await apiClient.get(`/api/v1/employees/${employeeId}/attendance${query ? `?${query}` : ''}`);
+  },
+
+  async getEmployeeTimeOffRequests(employeeId, params = {}) {
+    const query = new URLSearchParams(params).toString();
+    return await apiClient.get(`/api/v1/employees/${employeeId}/time-off/requests${query ? `?${query}` : ''}`);
+  },
+
+  async getEmployeeLeaveAllocations(employeeId, params = {}) {
+    const query = new URLSearchParams(params).toString();
+    return await apiClient.get(`/api/v1/employees/${employeeId}/time-off/allocations${query ? `?${query}` : ''}`);
+  },
+
+  async getEmployeeTimeOffBalances(employeeId) {
+    return await apiClient.get(`/api/v1/employees/${employeeId}/time-off/balances`);
+  },
+
   // =========================================================================
   // 2. DEPARTMENTS & MASTER DATA
   // =========================================================================
@@ -142,15 +178,22 @@ export const apiService = {
     return await apiClient.get('/api/v1/attendance/session');
   },
 
-  async checkIn(timestamp = null) {
-    return await apiClient.post('/api/v1/attendance/check-in', timestamp ? { timestamp } : {});
+  async checkIn(payload = null) {
+    const body = typeof payload === 'object' && payload !== null
+      ? payload
+      : (payload ? { timestamp: payload } : {});
+    return await apiClient.post('/api/v1/attendance/check-in', body);
   },
 
-  async checkOut(sessionId = null, timestamp = null) {
-    return await apiClient.post('/api/v1/attendance/check-out', {
-      session_id: sessionId,
-      timestamp: timestamp,
-    });
+  async checkOut(sessionIdOrPayload = null, timestamp = null) {
+    let body = {};
+    if (typeof sessionIdOrPayload === 'object' && sessionIdOrPayload !== null) {
+      body = sessionIdOrPayload;
+    } else {
+      if (sessionIdOrPayload) body.session_id = sessionIdOrPayload;
+      if (timestamp) body.timestamp = timestamp;
+    }
+    return await apiClient.post('/api/v1/attendance/check-out', body);
   },
 
   async createManualAttendance(data) {
@@ -330,7 +373,33 @@ export const apiService = {
   // =========================================================================
   // 7. DASHBOARD ANALYTICS
   // =========================================================================
-  async getDashboardSummary() {
-    return await apiClient.get('/api/v1/dashboard/summary');
+  async getDashboardSummary(params = {}) {
+    const query = new URLSearchParams(params).toString();
+    return await apiClient.get(`/api/v1/dashboard/summary${query ? `?${query}` : ''}`);
+  },
+
+  // =========================================================================
+  // 8. WORKING SCHEDULES
+  // =========================================================================
+  async getSchedules(params = {}) {
+    const query = new URLSearchParams(params).toString();
+    return await apiClient.get(`/api/v1/schedules${query ? `?${query}` : ''}`);
+  },
+
+  async getScheduleById(id) {
+    return await apiClient.get(`/api/v1/schedules/${id}`);
+  },
+
+  async createSchedule(data) {
+    return await apiClient.post('/api/v1/schedules', data);
+  },
+
+  async updateSchedule(id, data) {
+    return await apiClient.patch(`/api/v1/schedules/${id}`, data);
+  },
+
+  async deleteSchedule(id) {
+    return await apiClient.delete(`/api/v1/schedules/${id}`);
   },
 };
+

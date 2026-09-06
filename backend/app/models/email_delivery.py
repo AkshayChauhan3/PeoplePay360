@@ -2,12 +2,11 @@
 Email Delivery Entity — PeoplePay360
 
 Persists delivery audit records for employee payslips distributed via email.
-Tracks status (PENDING, SENT, FAILED), transmission timestamps, retry attempts,
-and diagnostic error messages.
+Tracks status (PENDING, SENDING, SENT, FAILED), transmission timestamps, retry attempts,
+failure classifications (TEMPORARY vs PERMANENT), and diagnostic error messages.
 """
 
 import enum
-import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
@@ -21,7 +20,6 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
-from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -37,13 +35,26 @@ class EmailDeliveryStatus(str, enum.Enum):
     Lifecycle status of an individual payslip email delivery attempt.
 
     - PENDING: Email is queued or currently being prepared.
+    - SENDING: Claimed by worker and currently in-flight.
     - SENT: Successfully delivered to recipient inbox or accepted by SMTP relay.
     - FAILED: Delivery attempt failed (e.g. SMTP rejection, invalid address, timeout).
     """
 
     PENDING = "PENDING"
+    SENDING = "SENDING"
     SENT = "SENT"
     FAILED = "FAILED"
+
+
+class EmailFailureType(str, enum.Enum):
+    """
+    Classification of failure reason for retry strategy:
+    - TEMPORARY: Network glitch, socket timeout, transient 4xx.
+    - PERMANENT: 5xx rejection, invalid recipient syntax, non-existent mailbox.
+    """
+
+    TEMPORARY = "TEMPORARY"
+    PERMANENT = "PERMANENT"
 
 
 def _utcnow() -> datetime:
@@ -89,8 +100,8 @@ class PayslipEmailDelivery(Base):
         nullable=False,
     )
 
-    employee_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+    employee_id: Mapped[int] = mapped_column(
+        Integer,
         ForeignKey("employees.id", ondelete="CASCADE"),
         index=True,
         nullable=False,
@@ -132,6 +143,44 @@ class PayslipEmailDelivery(Base):
         nullable=False,
     )
 
+    attempt_count: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        server_default="0",
+        nullable=False,
+    )
+
+    failure_type: Mapped[EmailFailureType | None] = mapped_column(
+        Enum(EmailFailureType, name="emailfailuretype", create_type=False),
+        nullable=True,
+        default=None,
+    )
+
+    last_attempt_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        default=None,
+    )
+
+    next_retry_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        default=None,
+    )
+
+    job_id: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+        default=None,
+        index=True,
+    )
+
+    storage_key: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+        default=None,
+    )
+
     sent_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
@@ -163,6 +212,7 @@ class PayslipEmailDelivery(Base):
 
     payslip: Mapped["Payslip"] = relationship(
         "Payslip",
+        back_populates="email_deliveries",
         lazy="select",
     )
 

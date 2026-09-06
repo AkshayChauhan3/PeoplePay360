@@ -5,6 +5,7 @@ from app.db.database import get_db
 from app.dependencies.auth import get_current_user, require_hr_management
 from app.models.user import User
 from app.schemas.schedule import ScheduleIn, ScheduleOut
+from app.schemas.schedule import ScheduleIn, ScheduleOut, ScheduleUpdate
 from app.services import schedule_service
 
 router = APIRouter(prefix="/schedules", tags=["Schedules"])
@@ -45,4 +46,26 @@ async def get_schedule(
             detail=f"Working schedule with ID {id} does not exist.",
         )
     return sched
+
+
+@router.patch("/{id}", response_model=ScheduleOut)
+async def update_schedule(
+    id: int,
+    data: ScheduleUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_hr_management()),
+) -> ScheduleOut:
+    """Update working schedule details and shift lines (HR & Admin only)."""
+    return await schedule_service.update_schedule(db, id, data)
+
+
+@router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_schedule(
+    id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_hr_management()),
+) -> None:
+    """Delete a working schedule (HR & Admin only)."""
+    await schedule_service.delete_schedule(db, id)
+
 

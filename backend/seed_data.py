@@ -38,7 +38,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 # App imports
 from app.core.security import hash_password
 from app.db.database import AsyncSessionLocal, engine
-from app.models.attendance import Attendance
+from app.models.attendance import Attendance, AttendanceStatus
 from app.models.contract import Contract, ContractStatus
 from app.models.department import Department
 from app.models.email_delivery import PayslipEmailDelivery
@@ -186,6 +186,7 @@ class DatabaseSeeder:
         await self._seed_employees_and_contracts()
         await self._seed_user_accounts()
         await self._seed_leave_allocations()
+        await self._seed_attendance_records()
 
         if self.create_payrun:
             await self._seed_sample_payrun()
@@ -365,6 +366,14 @@ class DatabaseSeeder:
     async def _seed_departments_and_job_positions(self):
         print("\n[4/7] 🏢 Seeding 8 Functional Departments & 30 Job Positions...")
         dept_data = [
+            ("EXEC", "Executive Management", "Head: Rajesh Singhania | C-Suite and executive organizational leadership"),
+            ("ENG", "Software Engineering", "Head: Priya Nair | Core product development, platform, and quality engineering"),
+            ("CLOUD", "Cloud & Infrastructure", "Head: Vikram Malhotra | SRE, cloud architecture, and DevOps infrastructure"),
+            ("PROD", "Product & UX Design", "Head: Sunita Rao | Product management, roadmap, and user experience design"),
+            ("HR", "Human Resources", "Head: Ananya Deshmukh | People operations, talent acquisition, culture, and payroll"),
+            ("FIN", "Finance & Accounts", "Head: Arjun Mehta | Corporate finance, financial planning, billing, and accounting"),
+            ("SALES", "Sales & Enterprise Growth", "Head: Sneha Kulkarni | Enterprise business development and customer acquisition"),
+            ("CS", "Customer Success & Operations", "Head: Karthik Iyer | Customer onboarding, technical support, and account health"),
             ("EXEC", "Executive Management", "C-Suite and executive organizational leadership"),
             ("ENG", "Software Engineering", "Core product development, platform, and quality engineering"),
             ("CLOUD", "Cloud & Infrastructure", "SRE, cloud architecture, and DevOps infrastructure"),
@@ -382,6 +391,8 @@ class DatabaseSeeder:
                 dept = Department(code=code, name=name, description=desc, is_active=True)
                 self.db.add(dept)
                 await self.db.flush()
+            else:
+                dept.description = desc
             self.departments[code] = dept
 
         pos_data = [
@@ -759,54 +770,86 @@ class DatabaseSeeder:
                 )
                 self.db.add(cnt)
 
+        # Link department managers (Designated Department Heads)
+        dept_manager_map = {
+            "EXEC": 0,    # Rajesh Singhania (CEO)
+            "ENG": 1,     # Priya Nair (CTO)
+            "CLOUD": 2,   # Vikram Malhotra (VP Cloud)
+            "PROD": 3,    # Sunita Rao (VP Product)
+            "HR": 4,      # Ananya Deshmukh (CHRO)
+            "FIN": 5,     # Arjun Mehta (CFO)
+            "SALES": 6,   # Sneha Kulkarni (CRO)
+            "CS": 7,      # Karthik Iyer (VP CS)
+        }
+        for d_code, emp_idx in dept_manager_map.items():
+            if d_code in self.departments and emp_idx < len(self.employees):
+                self.departments[d_code].manager_id = self.employees[emp_idx].id
+
         await self.db.flush()
         print("      ✓ 400 Active Employees & 400 RUNNING Contracts generated.")
+        print("      ✓ 8 Department Managers linked by relational Employee ID.")
 
     # -----------------------------------------------------------------------
     # 6. Seed User Accounts & System Logins
     # -----------------------------------------------------------------------
     async def _seed_user_accounts(self):
-        print("\n[6/7] 🔐 Seeding Authentication User Accounts...")
+        print("\n[6/7] 🔐 Seeding Authentication User Accounts for all 400 employees...")
 
-        user_accounts = [
-            # Super Admin linked to CEO (EMP0001)
-            ("admin@peoplepay360.com", HASH_ADMIN_123, "ADMIN", 0),
-            # HR Director linked to CHRO (EMP0005)
-            ("chro@peoplepay360.com", HASH_HR_123456, "HR_PAYROLL_MANAGER", 4),
-            # HR Manager linked to People Ops Director (EMP0015)
-            ("hr.manager@peoplepay360.com", HASH_HR_123456, "HR_MANAGER", 14),
-            # Payroll Specialist linked to Payroll Lead (EMP0032)
-            ("payroll@peoplepay360.com", HASH_PAYROLL_123, "HR_PAYROLL_USER", 31),
-            # Standalone Admin (no employee record) for API automation
-            ("system.admin@peoplepay360.com", HASH_ADMIN_123, "ADMIN", None),
-            # Key Department Heads as standard EMPLOYEE accounts
-            ("cto@peoplepay360.com", HASH_EMPLOYEE_123, "EMPLOYEE", 1),
-            ("eng.director@peoplepay360.com", HASH_EMPLOYEE_123, "EMPLOYEE", 7),
-            ("lead.swe@peoplepay360.com", HASH_EMPLOYEE_123, "EMPLOYEE", 19),
-            ("sr.swe@peoplepay360.com", HASH_EMPLOYEE_123, "EMPLOYEE", 55),
-            ("swe@peoplepay360.com", HASH_EMPLOYEE_123, "EMPLOYEE", 199),
+        # 1. Convenience administrative logins (for rapid testing without looking up employee names)
+        convenience_accounts = [
+            ("admin@peoplepay360.com", HASH_ADMIN_123, "ADMIN"),
+            ("system.admin@peoplepay360.com", HASH_ADMIN_123, "ADMIN"),
+            ("chro@peoplepay360.com", HASH_HR_123456, "HR_PAYROLL_MANAGER"),
+            ("hr.manager@peoplepay360.com", HASH_HR_123456, "HR_MANAGER"),
+            ("payroll@peoplepay360.com", HASH_PAYROLL_123, "HR_PAYROLL_USER"),
         ]
 
         count = 0
-        for email, pwd_hash, role_name, emp_idx in user_accounts:
+        for email, pwd_hash, role_name in convenience_accounts:
             res = await self.db.execute(select(User).where(User.email == email))
             usr = res.scalar_one_or_none()
-            emp_id = self.employees[emp_idx].id if emp_idx is not None and emp_idx < len(self.employees) else None
-            role_id = self.roles[role_name].id
-
             if not usr:
                 usr = User(
                     email=email,
                     password_hash=pwd_hash,
-                    role_id=role_id,
-                    employee_id=emp_id,
+                    role_id=self.roles[role_name].id,
+                    employee_id=None,
+                    is_active=True,
+                )
+                self.db.add(usr)
+                count += 1
+
+        # 2. Every single employee gets their own dedicated 1:1 login
+        # Map specific leadership / key personas:
+        # Index 0 (CEO): ADMIN
+        # Index 4 (CHRO): HR_PAYROLL_MANAGER
+        # Index 14 (People Ops Director / HR Mgr): HR_MANAGER
+        # Index 31 (Payroll Lead): HR_PAYROLL_USER
+        # All others: EMPLOYEE
+        special_roles = {
+            0: ("ADMIN", HASH_ADMIN_123),
+            4: ("HR_PAYROLL_MANAGER", HASH_HR_123456),
+            14: ("HR_MANAGER", HASH_HR_123456),
+            31: ("HR_PAYROLL_USER", HASH_PAYROLL_123),
+        }
+
+        for idx, emp in enumerate(self.employees):
+            res = await self.db.execute(select(User).where(User.employee_id == emp.id))
+            usr = res.scalar_one_or_none()
+            if not usr:
+                role_name, pwd_hash = special_roles.get(idx, ("EMPLOYEE", HASH_EMPLOYEE_123))
+                usr = User(
+                    email=emp.email,
+                    password_hash=pwd_hash,
+                    role_id=self.roles[role_name].id,
+                    employee_id=emp.id,
                     is_active=True,
                 )
                 self.db.add(usr)
                 count += 1
 
         await self.db.flush()
-        print(f"      ✓ {count} System Login Users active (Admin, HR, Payroll, Employee).")
+        print(f"      ✓ {count} System Login Users active (all 400 employees + convenience admin logins).")
 
     # -----------------------------------------------------------------------
     # 7. Seed Leave Allocations (PTO & SICK for 2026)
@@ -862,7 +905,183 @@ class DatabaseSeeder:
         print(f"      ✓ {len(allocations)} Leave Allocations granted (18 PTO + 12 SICK).")
 
     # -----------------------------------------------------------------------
-    # 8. Seed Sample Payrun (September 2026 Tech & Cloud Cycle)
+    # 8. Seed Realistic Attendance Details
+    # -----------------------------------------------------------------------
+    async def _seed_attendance_records(self):
+        print("\n[8/8] ⏱️  Seeding Realistic Attendance Details across 8 Departments...")
+
+        # Dates:
+        # Week 1: 2026-08-24 to 2026-08-28 (Mon - Fri) -> Seeded for top 60 employees
+        # Week 2: 2026-08-31 to 2026-09-04 (Mon - Fri) -> Seeded for all 400 employees
+        week1_dates = [
+            datetime.date(2026, 8, 24),
+            datetime.date(2026, 8, 25),
+            datetime.date(2026, 8, 26),
+            datetime.date(2026, 8, 27),
+            datetime.date(2026, 8, 28),
+        ]
+        week2_dates = [
+            datetime.date(2026, 8, 31),
+            datetime.date(2026, 9, 1),
+            datetime.date(2026, 9, 2),
+            datetime.date(2026, 9, 3),
+            datetime.date(2026, 9, 4),
+        ]
+
+        target_assignments = []
+        for d in week1_dates:
+            for emp in self.employees[:60]:
+                target_assignments.append((emp, d))
+
+        for d in week2_dates:
+            for emp in self.employees:
+                target_assignments.append((emp, d))
+
+        attendances = []
+        for emp, att_date in target_assignments:
+            res = await self.db.execute(
+                select(Attendance.id).where(
+                    Attendance.employee_id == emp.id,
+                    Attendance.attendance_date == att_date,
+                )
+            )
+            if res.scalars().first():
+                continue
+
+            # Deterministic pseudo-random seed
+            seed_val = (emp.id * 37 + att_date.day * 13 + att_date.month * 7) % 100
+
+            # Schedule start / end
+            # Flexible Tech (ENG, CLOUD): 10:00 - 19:00 UTC (expected 480 mins after 60m break)
+            # Standard (all other departments): 09:00 - 18:00 UTC (expected 480 mins after 60m break)
+            is_tech = emp.department_id in (self.departments["ENG"].id, self.departments["CLOUD"].id)
+            sched_start = 10 if is_tech else 9
+            sched_end = 19 if is_tech else 18
+
+            if seed_val < 85:
+                # 85%: PRESENT (On Time)
+                c_in_min = seed_val % 7
+                check_in_dt = datetime.datetime(
+                    att_date.year, att_date.month, att_date.day,
+                    sched_start, c_in_min, 0, tzinfo=datetime.timezone.utc,
+                )
+                ot_min = (seed_val * 3) % 25
+                check_out_dt = datetime.datetime(
+                    att_date.year, att_date.month, att_date.day,
+                    sched_end, ot_min, 0, tzinfo=datetime.timezone.utc,
+                )
+                worked = 480 + ot_min - c_in_min
+                att = Attendance(
+                    employee_id=emp.id,
+                    attendance_date=att_date,
+                    check_in=check_in_dt,
+                    check_out=check_out_dt,
+                    worked_minutes=worked,
+                    late_minutes=0,
+                    overtime_minutes=ot_min,
+                    status=AttendanceStatus.PRESENT,
+                    is_manual_edit=False,
+                )
+            elif seed_val < 94:
+                # 9%: LATE (15 to 40 mins late)
+                late_mins = 15 + (seed_val % 25)
+                check_in_dt = datetime.datetime(
+                    att_date.year, att_date.month, att_date.day,
+                    sched_start, late_mins, 0, tzinfo=datetime.timezone.utc,
+                )
+                check_out_dt = datetime.datetime(
+                    att_date.year, att_date.month, att_date.day,
+                    sched_end, 15, 0, tzinfo=datetime.timezone.utc,
+                )
+                worked = 480 - late_mins + 15
+                att = Attendance(
+                    employee_id=emp.id,
+                    attendance_date=att_date,
+                    check_in=check_in_dt,
+                    check_out=check_out_dt,
+                    worked_minutes=worked,
+                    late_minutes=late_mins,
+                    overtime_minutes=0,
+                    status=AttendanceStatus.LATE,
+                    is_manual_edit=False,
+                )
+            elif seed_val < 98:
+                # 4%: HALF_DAY
+                check_in_dt = datetime.datetime(
+                    att_date.year, att_date.month, att_date.day,
+                    sched_start, 0, 0, tzinfo=datetime.timezone.utc,
+                )
+                check_out_dt = datetime.datetime(
+                    att_date.year, att_date.month, att_date.day,
+                    sched_start + 4, 15, 0, tzinfo=datetime.timezone.utc,
+                )
+                att = Attendance(
+                    employee_id=emp.id,
+                    attendance_date=att_date,
+                    check_in=check_in_dt,
+                    check_out=check_out_dt,
+                    worked_minutes=240,
+                    late_minutes=0,
+                    overtime_minutes=0,
+                    status=AttendanceStatus.HALF_DAY,
+                    is_manual_edit=False,
+                )
+            else:
+                # 2%: ABSENT
+                check_in_dt = datetime.datetime(
+                    att_date.year, att_date.month, att_date.day,
+                    sched_start, 0, 0, tzinfo=datetime.timezone.utc,
+                )
+                att = Attendance(
+                    employee_id=emp.id,
+                    attendance_date=att_date,
+                    check_in=check_in_dt,
+                    check_out=None,
+                    worked_minutes=0,
+                    late_minutes=0,
+                    overtime_minutes=0,
+                    status=AttendanceStatus.ABSENT,
+                    is_manual_edit=False,
+                    correction_reason="Unplanned Leave / Medical Emergency",
+                )
+
+            attendances.append(att)
+
+        # Also seed an active session for today so demo users show 'Punched In'
+        today = datetime.date.today()
+        demo_punched_in = [0, 1, 4, 14, 31, 49, 199]
+        for p_idx in demo_punched_in:
+            if p_idx < len(self.employees):
+                p_emp = self.employees[p_idx]
+                res = await self.db.execute(
+                    select(Attendance.id).where(
+                        Attendance.employee_id == p_emp.id,
+                        Attendance.attendance_date == today,
+                    )
+                )
+                if not res.scalars().first():
+                    check_in_now = datetime.datetime.now(datetime.timezone.utc).replace(hour=3, minute=30, second=0)
+                    active_att = Attendance(
+                        employee_id=p_emp.id,
+                        attendance_date=today,
+                        check_in=check_in_now,
+                        check_out=None,
+                        worked_minutes=0,
+                        late_minutes=0,
+                        overtime_minutes=0,
+                        status=AttendanceStatus.INCOMPLETE,
+                        is_manual_edit=False,
+                    )
+                    attendances.append(active_att)
+
+        if attendances:
+            self.db.add_all(attendances)
+            await self.db.flush()
+
+        print(f"      ✓ {len(attendances)} Attendance Records seeded (Present, Late, Half Day, Absent, Active Sessions).")
+
+    # -----------------------------------------------------------------------
+    # 9. Seed Sample Payrun (September 2026 Tech & Cloud Cycle)
     # -----------------------------------------------------------------------
     async def _seed_sample_payrun(self):
         print("\n[*] 💳 Computing September 2026 Tech & Cloud Payroll Cycle...")

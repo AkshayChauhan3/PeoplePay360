@@ -2,6 +2,14 @@ import React, { useState } from 'react';
 import Logo from './Logo';
 import { apiService } from '../services/apiService';
 
+const DEMO_ACCOUNTS = [
+  { roleLabel: 'System Admin', tag: 'ADMIN', email: 'admin@peoplepay360.com', password: 'Admin@123' },
+  { roleLabel: 'HR Director', tag: 'CHRO', email: 'chro@peoplepay360.com', password: 'Hr@123456' },
+  { roleLabel: 'HR Manager', tag: 'HR_MGR', email: 'hr.manager@peoplepay360.com', password: 'Hr@123456' },
+  { roleLabel: 'Payroll Specialist', tag: 'PAYROLL', email: 'payroll@peoplepay360.com', password: 'Payroll@123' },
+  { roleLabel: 'Employee (Priya Nair)', tag: 'EMPLOYEE', email: 'priya.nair@peoplepay360.com', password: 'Employee@123' },
+];
+
 const LoginPortal = ({ onSignIn }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -13,13 +21,27 @@ const LoginPortal = ({ onSignIn }) => {
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotSent, setForgotSent] = useState(false);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async (e, customEmail = null, customPassword = null) => {
+    if (e && e.preventDefault) e.preventDefault();
+    const loginEmail = (customEmail !== null ? customEmail : email).trim();
+    const loginPassword = customPassword !== null ? customPassword : password;
+
+    if (!loginEmail || !loginPassword) {
+      setError('Please enter both email and password.');
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
-      const res = await apiService.login(email, password);
-      onSignIn(res.user || { email, role: 'ADMIN' });
+      await apiService.login(loginEmail, loginPassword);
+      let user = null;
+      try {
+        user = await apiService.getMe();
+      } catch (_) {
+        user = { email: loginEmail, role: 'ADMIN' };
+      }
+      onSignIn(user);
     } catch (err) {
       setError(err.message || 'Authentication failed. Please check your credentials.');
     } finally {
@@ -289,7 +311,69 @@ const LoginPortal = ({ onSignIn }) => {
             </button>
           </form>
 
-
+          {/* Quick Demo Access Bar */}
+          <div style={{ marginTop: '1.5rem', paddingTop: '1.25rem', borderTop: '1px dashed var(--border-structural)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+              <span style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ color: '#f59e0b' }}>⚡</span> Quick Demo Personas
+              </span>
+              <span style={{ fontSize: '10.5px', color: '#94a3b8' }}>Click to sign in instantly</span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
+              {DEMO_ACCOUNTS.map((acc) => (
+                <button
+                  key={acc.email}
+                  type="button"
+                  disabled={loading}
+                  onClick={() => {
+                    setEmail(acc.email);
+                    setPassword(acc.password);
+                    handleSubmit(null, acc.email, acc.password);
+                  }}
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'flex-start',
+                    padding: '8px 10px',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border-structural)',
+                    background: '#f8fafc',
+                    cursor: loading ? 'not-allowed' : 'pointer',
+                    textAlign: 'left',
+                    transition: 'all 0.15s ease',
+                    opacity: loading ? 0.7 : 1,
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!loading) {
+                      e.currentTarget.style.borderColor = 'var(--secondary)';
+                      e.currentTarget.style.background = '#f0fdfa';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!loading) {
+                      e.currentTarget.style.borderColor = 'var(--border-structural)';
+                      e.currentTarget.style.background = '#f8fafc';
+                    }
+                  }}
+                  title={`Sign in as ${acc.roleLabel} (${acc.email})`}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginBottom: '2px' }}>
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--primary)' }}>{acc.roleLabel}</span>
+                    <span style={{ fontSize: '9.5px', padding: '1px 5px', borderRadius: '4px', background: 'rgba(0, 191, 165, 0.12)', color: '#0f766e', fontWeight: 600 }}>
+                      {acc.tag}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '10.5px', color: 'var(--text-secondary)', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', width: '100%' }}>
+                    {acc.email}
+                  </div>
+                  <div style={{ fontSize: '10px', color: '#64748b', marginTop: '2px', display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+                    <span>Pass: <strong style={{ color: 'var(--text-primary)' }}>{acc.password}</strong></span>
+                    <span style={{ color: 'var(--color-primary, #6366f1)', fontWeight: 600 }}>Sign In →</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         {/* Bottom Footer Links */}

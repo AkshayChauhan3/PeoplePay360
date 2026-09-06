@@ -14,6 +14,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.config import settings
 from app.models.employee import Employee
 from app.models.payrun import Payrun, PayrunStatus
 from app.models.payslip import Payslip, PayslipStatus
@@ -350,9 +351,14 @@ async def validate_payrun(
     return updated, errors, warnings  # type: ignore[return-value]
 
 
-async def mark_payrun_paid(db: AsyncSession, payrun_id: int) -> Payrun:
+async def mark_payrun_paid(
+    db: AsyncSession,
+    payrun_id: int,
+    auto_deliver_emails: bool | None = None,
+) -> Payrun:
     """
     Transition payrun and its payslips from VALIDATED to PAID.
+    Optionally triggers asynchronous payslip email distribution in background.
     """
     payrun = await get_payrun_by_id(db, payrun_id)
     if not payrun:
@@ -372,6 +378,17 @@ async def mark_payrun_paid(db: AsyncSession, payrun_id: int) -> Payrun:
         ps.status = PayslipStatus.PAID
 
     await db.commit()
+
+    should_auto_email = (
+        auto_deliver_emails
+        if auto_deliver_emails is not None
+        else settings.auto_email_on_payrun_paid
+    )
+    if should_auto_email:
+        import asyncio
+        from app.workers.email_worker import process_payrun_emails_job
+        asyncio.create_task(process_payrun_emails_job(ctx=None, payrun_id=payrun.id))
+
     return await get_payrun_by_id(db, payrun.id)  # type: ignore[return-value]
 
 

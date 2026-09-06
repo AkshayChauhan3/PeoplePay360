@@ -9,6 +9,10 @@ from app.models.attendance import AttendanceStatus
 class AttendanceCheckInRequest(BaseModel):
     """Payload for employee check-in."""
 
+    employee_id: int | None = Field(
+        default=None,
+        description="Optional employee ID (allowed for HR/Admin to check in an employee)",
+    )
     timestamp: datetime | None = Field(
         default=None,
         description="Optional check-in timestamp (defaults to server UTC now)",
@@ -18,6 +22,10 @@ class AttendanceCheckInRequest(BaseModel):
 class AttendanceCheckOutRequest(BaseModel):
     """Payload for employee check-out."""
 
+    employee_id: int | None = Field(
+        default=None,
+        description="Optional employee ID (allowed for HR/Admin to check out an employee)",
+    )
     timestamp: datetime | None = Field(
         default=None,
         description="Optional check-out timestamp (defaults to server UTC now)",
