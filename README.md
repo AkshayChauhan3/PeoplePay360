@@ -54,6 +54,14 @@ PeoplePay360/
 | [v0.0.6](backend/CHANGELOG.md) | Salary Structures, Salary Rules & Calculation Engine |
 | [v0.0.7](backend/CHANGELOG.md) | Payruns, Payslips & Payroll Processing Engine |
 
+## RBAC Architecture & Design Rationale
+
+PeoplePay360 enforces strict server-side and client-side Role-Based Access Control:
+- **Single-Role Per User (`User.role_id`)**: Each user account is assigned exactly one primary system role from the 5 standard personas (`ADMIN`, `HR_MANAGER`, `HR_PAYROLL_MANAGER`, `HR_PAYROLL_USER`, `EMPLOYEE`).
+- **Design Decision**: A single-role assignment was deliberately chosen for this release to provide unambiguous, deterministic privilege gating and complete auditability without complex multi-group union resolution or conflicting override rules.
+- **Strict Separation of Concerns**: Per specification, the `HR_MANAGER` persona has full authority over workforce master data, contracts, and leave approvals, but is strictly blocked from accessing salary structures, salary rules, and payrun processing (enforced at the route dependency layer via `require_payroll_read` / `require_payroll_manager`).
+
+
 
 ## Getting Started
 

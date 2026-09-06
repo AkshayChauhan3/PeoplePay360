@@ -213,45 +213,45 @@ export const apiService = {
   // =========================================================================
   async getLeaveRequests(params = {}) {
     const query = new URLSearchParams(params).toString();
-    return await apiClient.get(`/api/v1/timeoff/requests${query ? `?${query}` : ''}`);
+    return await apiClient.get(`/api/v1/time-off/requests${query ? `?${query}` : ''}`);
   },
 
   async submitLeaveRequest(data) {
-    return await apiClient.post('/api/v1/timeoff/requests', data);
+    return await apiClient.post('/api/v1/time-off/requests', data);
   },
 
   async approveLeaveRequest(id) {
-    return await apiClient.post(`/api/v1/timeoff/requests/${id}/approve`, {});
+    return await apiClient.post(`/api/v1/time-off/requests/${id}/approve`, {});
   },
 
   async refuseLeaveRequest(id, reason = 'Rejected by HR Manager') {
-    return await apiClient.post(`/api/v1/timeoff/requests/${id}/refuse`, { refusal_reason: reason });
+    return await apiClient.post(`/api/v1/time-off/requests/${id}/refuse`, { refusal_reason: reason });
   },
 
   async cancelLeaveRequest(id) {
-    return await apiClient.post(`/api/v1/timeoff/requests/${id}/cancel`, {});
+    return await apiClient.post(`/api/v1/time-off/requests/${id}/cancel`, {});
   },
 
   async getAllocations(params = {}) {
     const query = new URLSearchParams(params).toString();
-    return await apiClient.get(`/api/v1/timeoff/allocations${query ? `?${query}` : ''}`);
+    return await apiClient.get(`/api/v1/time-off/allocations${query ? `?${query}` : ''}`);
   },
 
   async createAllocation(data) {
-    return await apiClient.post('/api/v1/timeoff/allocations', data);
+    return await apiClient.post('/api/v1/time-off/allocations', data);
   },
 
   async cancelAllocation(id) {
-    return await apiClient.delete(`/api/v1/timeoff/allocations/${id}`);
+    return await apiClient.delete(`/api/v1/time-off/allocations/${id}`);
   },
 
   async getTimeOffTypes(includeInactive = false) {
-    return await apiClient.get(`/api/v1/timeoff/types?include_inactive=${includeInactive}`);
+    return await apiClient.get(`/api/v1/time-off/types?include_inactive=${includeInactive}`);
   },
 
   async getLeaveBalances(employeeId = null) {
     const q = employeeId ? `?employee_id=${employeeId}` : '';
-    return await apiClient.get(`/api/v1/timeoff/balances${q}`);
+    return await apiClient.get(`/api/v1/time-off/balances${q}`);
   },
 
   // =========================================================================

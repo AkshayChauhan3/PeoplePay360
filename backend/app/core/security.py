@@ -3,7 +3,6 @@ from typing import Any
 
 import bcrypt
 from jose import JWTError, jwt
-import bcrypt
 
 from app.core.config import settings
 from app.schemas.auth import TokenPayload

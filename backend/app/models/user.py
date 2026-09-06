@@ -93,9 +93,10 @@ class User(Base):
     # ------------------------------------------------------------------
     # Role Association (RBAC)
     # ------------------------------------------------------------------
+    # Single-role design: Each user has exactly one primary system role (e.g. ADMIN,
+    # HR_MANAGER, HR_PAYROLL_MANAGER, HR_PAYROLL_USER, EMPLOYEE). This guarantees deterministic
+    # privilege resolution, unambiguous route protection, and direct auditability.
     # Foreign key referencing the `roles` master table.
-    # Using a relational foreign key instead of hardcoded enums allows dynamic
-    # permission management without requiring schema migrations.
     role_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("roles.id"),

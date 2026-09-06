@@ -3,6 +3,7 @@ from typing import Any
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -244,7 +245,14 @@ async def check_in(
         is_manual_edit=False,
     )
     db.add(attendance)
-    await db.flush()
+    try:
+        await db.flush()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Attendance record already exists for employee {employee_id} on {att_date}.",
+        ) from exc
 
     return await get_attendance_by_id(db, attendance.id)  # type: ignore[return-value]
 

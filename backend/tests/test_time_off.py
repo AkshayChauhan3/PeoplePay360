@@ -421,13 +421,13 @@ async def test_scenario_32_exact_balance_deduction_and_overdraw_prevention(
     assert pto_bal["total_consumed"] == 3.0
     assert pto_bal["total_remaining"] == 17.0
 
-    # 3. Request 2: 11 days (2026-03-01 to 2026-03-11)
+    # 3. Request 2: 11 working days (2026-03-02 to 2026-03-16)
     req2_res = await async_client.post(
         "/api/v1/employees/me/time-off/requests",
         json={
             "time_off_type_id": pto["id"],
-            "start_date": "2026-03-01",
-            "end_date": "2026-03-11",
+            "start_date": "2026-03-02",
+            "end_date": "2026-03-16",
             "reason": "Spring vacation",
         },
         headers=emp_headers,
@@ -450,14 +450,14 @@ async def test_scenario_32_exact_balance_deduction_and_overdraw_prevention(
     assert pto_bal["total_consumed"] == 14.0
     assert pto_bal["total_remaining"] == 6.0
 
-    # 4. Request 3: 10 days (2026-04-01 to 2026-04-10)
+    # 4. Request 3: 10 working days (2026-04-01 to 2026-04-14)
     # Attempting to create request for 10 days when only 6 remain fails with 400 Bad Request
     req3_res = await async_client.post(
         "/api/v1/employees/me/time-off/requests",
         json={
             "time_off_type_id": pto["id"],
             "start_date": "2026-04-01",
-            "end_date": "2026-04-10",
+            "end_date": "2026-04-14",
             "reason": "Overdrawn vacation attempt",
         },
         headers=emp_headers,
@@ -496,13 +496,13 @@ async def test_scenario_33_no_allocation_unpaid_leave(
     unpaid = next(t for t in types_res.json() if t["code"] == "UNPAID")
     assert unpaid["requires_allocation"] is False
 
-    # Employee submits request for 5 days unpaid leave without any allocation
+    # Employee submits request for 5 working days unpaid leave without any allocation
     req_res = await async_client.post(
         "/api/v1/employees/me/time-off/requests",
         json={
             "time_off_type_id": unpaid["id"],
-            "start_date": "2026-05-10",
-            "end_date": "2026-05-14",
+            "start_date": "2026-05-11",
+            "end_date": "2026-05-15",
             "reason": "Personal unpaid time off",
         },
         headers=emp_headers,
@@ -1655,4 +1655,52 @@ async def test_unlinked_user_self_service_rejected(
     # /me/time-off/balances
     res = await async_client.get("/api/v1/employees/me/time-off/balances", headers=headers)
     assert res.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_weekend_spanning_leave_calculates_working_days(
+    async_client: AsyncClient,
+    admin_auth_headers: dict[str, str],
+    sample_department: dict[str, Any],
+    sample_job_position: dict[str, Any],
+):
+    """
+    Verify Friday-to-Monday leave request (4 calendar days) only deducts
+    2 working days under standard Monday-Friday schedule.
+    """
+    emp, emp_headers = await _create_linked_employee(
+        async_client, admin_auth_headers, sample_department["id"], sample_job_position["id"],
+        "weekend_worker@example.com", "WKND_01"
+    )
+    types_res = await async_client.get("/api/v1/time-off/types", headers=admin_auth_headers)
+    pto = next(t for t in types_res.json() if t["code"] == "PTO")
+
+    # Allocate 10 days
+    await async_client.post(
+        "/api/v1/time-off/allocations",
+        json={
+            "employee_id": emp["id"],
+            "time_off_type_id": pto["id"],
+            "allocation_quantity": 10.0,
+            "valid_from": "2026-01-01",
+            "valid_to": "2026-12-31",
+        },
+        headers=admin_auth_headers,
+    )
+
+    # 2026-06-12 (Friday) to 2026-06-15 (Monday) = 4 calendar days, but exactly 2 working days
+    req_res = await async_client.post(
+        "/api/v1/employees/me/time-off/requests",
+        json={
+            "time_off_type_id": pto["id"],
+            "start_date": "2026-06-12",
+            "end_date": "2026-06-15",
+            "reason": "Long weekend getaway",
+        },
+        headers=emp_headers,
+    )
+    assert req_res.status_code == 201
+    data = req_res.json()
+    assert float(data["requested_quantity"]) == 2.0  # NOT 4.0!
+
 

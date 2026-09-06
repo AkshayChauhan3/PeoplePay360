@@ -452,3 +452,32 @@ async def get_applicable_contract(
     result = await db.execute(query)
     return result.scalars().first()
 
+
+async def get_contract_for_period(
+    db: AsyncSession,
+    employee_id: int,
+    period_start: date,
+    period_end: date,
+) -> Contract | None:
+    """
+    Look up the active RUNNING contract for an employee that covers the entire period [period_start, period_end].
+    Ensures contract started on or before period_start and either has no end date or ends on/after period_end.
+    Returns the contract with eager relationships loaded, or None if no running contract covers the full period.
+    """
+    query = (
+        _contract_query()
+        .where(
+            Contract.employee_id == employee_id,
+            Contract.status == ContractStatus.RUNNING,
+            Contract.start_date <= period_start,
+            or_(
+                Contract.end_date.is_(None),
+                Contract.end_date >= period_end,
+            ),
+        )
+        .order_by(Contract.start_date.desc())
+    )
+    result = await db.execute(query)
+    return result.scalars().first()
+
+

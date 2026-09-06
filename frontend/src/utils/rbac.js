@@ -99,13 +99,13 @@ export const ROLE_PERMISSIONS = {
 };
 
 export const isViewAllowed = (role, viewId) => {
-  const r = (role || 'ADMIN').toUpperCase();
+  const r = (role || 'EMPLOYEE').toUpperCase();
   const perms = ROLE_PERMISSIONS[r] || ROLE_PERMISSIONS.EMPLOYEE;
   return perms.allowedViews.includes(viewId);
 };
 
 export const hasPermission = (role, permKey) => {
-  const r = (role || 'ADMIN').toUpperCase();
+  const r = (role || 'EMPLOYEE').toUpperCase();
   const perms = ROLE_PERMISSIONS[r] || ROLE_PERMISSIONS.EMPLOYEE;
   return !!perms[permKey];
 };

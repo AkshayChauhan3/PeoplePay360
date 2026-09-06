@@ -11,12 +11,13 @@ Handles the core leave request lifecycle and business rules:
 - Filtered listing and self-service authorization boundaries
 """
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models.employee import Employee, EmployeeStatus
 from app.models.time_off import (
@@ -30,7 +31,7 @@ from app.models.time_off import (
 from app.models.user import UserRole
 from app.models.user import User
 from app.schemas.time_off import TimeOffRequestCreate, TimeOffRequestUpdate
-from app.services import time_off_allocation_service, time_off_type_service
+from app.services import schedule_service, time_off_allocation_service, time_off_type_service
 
 
 def _utcnow() -> datetime:
@@ -42,13 +43,17 @@ def calculate_quantity(
     start_date: date,
     end_date: date,
     explicit_quantity: Decimal | None = None,
+    schedule_days: set[int] | list[int] | None = None,
 ) -> Decimal:
     """
     Calculate or validate requested leave duration.
 
-    - For DAYS: defaults to inclusive day count: (end_date - start_date).days + 1.
-      Explicit fractional days (e.g. 0.5) are honored.
-    - For HOURS: defaults to 8.00 hours per day if not explicitly supplied.
+    - Explicit fractional or specific quantities (e.g. 0.5) are strictly honored.
+    - When explicit_quantity is omitted, duration is derived from scheduled working days:
+      counts days in [start_date, end_date] matching active schedule_days
+      (defaults to standard Monday–Friday {0, 1, 2, 3, 4} if none specified).
+    - If working_days is 0 (e.g. weekend-only request without schedule), falls back to calendar days.
+    - For HOURS: multiplies derived working days by 8.0 hours.
     """
     if explicit_quantity is not None:
         if explicit_quantity <= 0:
@@ -59,12 +64,23 @@ def calculate_quantity(
         return explicit_quantity
 
     calendar_days = (end_date - start_date).days + 1
+    active_schedule_days = set(schedule_days) if schedule_days is not None else {0, 1, 2, 3, 4}
+
+    working_days = 0
+    cur = start_date
+    while cur <= end_date:
+        if cur.weekday() in active_schedule_days:
+            working_days += 1
+        cur += timedelta(days=1)
+
+    eff_days = working_days if working_days > 0 else calendar_days
+
     if unit == TimeOffUnit.DAYS:
-        return Decimal(str(calendar_days))
+        return Decimal(str(eff_days))
     elif unit == TimeOffUnit.HOURS:
-        # Standard default of 8.0 hours per scheduled day
-        return Decimal(str(calendar_days * 8.0))
-    return Decimal(str(calendar_days))
+        # Standard default of 8.0 hours per scheduled working day
+        return Decimal(str(eff_days * 8.0))
+    return Decimal(str(eff_days))
 
 
 async def check_overlapping_requests(
@@ -160,7 +176,11 @@ async def create_request(
     6. Auto-approve if type.approval_required is False.
     """
     # 1. Validate employee
-    emp = await db.scalar(select(Employee).where(Employee.id == employee_id))
+    emp = await db.scalar(
+        select(Employee)
+        .options(selectinload(Employee.working_schedule))
+        .where(Employee.id == employee_id)
+    )
     if emp is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -185,12 +205,23 @@ async def create_request(
             detail=f"Time off type '{leave_type.name}' is inactive and cannot receive new requests.",
         )
 
+    # Resolve schedule for working days calculation
+    schedule = emp.working_schedule
+    if schedule is None:
+        schedule = await schedule_service.get_default_schedule(db)
+    schedule_days = (
+        {line.day_of_week for line in schedule.lines}
+        if (schedule and schedule.lines)
+        else {0, 1, 2, 3, 4}
+    )
+
     # 3. Calculate quantity
     qty = calculate_quantity(
         unit=leave_type.unit,
         start_date=data.start_date,
         end_date=data.end_date,
         explicit_quantity=data.requested_quantity,
+        schedule_days=schedule_days,
     )
 
     # 4. Enforce non-overlapping active requests

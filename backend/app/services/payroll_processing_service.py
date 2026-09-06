@@ -31,7 +31,7 @@ from app.schemas.payrun import (
     PayrollWarningItem,
     PayrunPreviewResponse,
 )
-from app.services.contract_service import get_applicable_contract
+from app.services.contract_service import get_applicable_contract, get_contract_for_period
 from app.services.salary_rule_engine import (
     CalculationContext,
     SalaryRuleEngine,
@@ -56,10 +56,12 @@ async def check_employee_payroll_eligibility(
     if employee.status != EmployeeStatus.ACTIVE:
         return False, "Employee is INACTIVE", None
 
-    # 2. Must have a RUNNING contract covering the payroll period
-    contract = await get_applicable_contract(db, employee.id, target_date=period_end)
+    # 2. Must have a RUNNING contract covering the entire payroll period
+    contract = await get_contract_for_period(
+        db, employee.id, period_start=period_start, period_end=period_end
+    )
     if not contract:
-        return False, "No running contract covering period", None
+        return False, "No running contract covering the full payroll period", None
 
     # 3. Contract must match the target Salary Structure
     if contract.salary_structure_id != expected_structure_id:

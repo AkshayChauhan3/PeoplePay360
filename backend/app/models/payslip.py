@@ -8,10 +8,10 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
-    UniqueConstraint,
     text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -62,11 +62,14 @@ class Payslip(Base):
 
     __tablename__ = "payslips"
     __table_args__ = (
-        UniqueConstraint(
+        Index(
+            "uq_payslips_employee_period_active",
             "employee_id",
             "period_start",
             "period_end",
-            name="uq_payslips_employee_period",
+            unique=True,
+            postgresql_where=text("status != 'CANCELLED'"),
+            sqlite_where=text("status != 'CANCELLED'"),
         ),
     )
 

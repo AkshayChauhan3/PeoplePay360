@@ -11,9 +11,11 @@ from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.db.database import get_db
 from app.dependencies.auth import get_current_user, require_hr_management
+from app.models.employee import Employee
 from app.models.time_off import AllocationStatus, TimeOffRequestStatus
 from app.models.user import User, UserRole
 from app.schemas.time_off import (
@@ -30,6 +32,7 @@ from app.schemas.time_off import (
     TimeOffTypeUpdate,
 )
 from app.services import (
+    schedule_service,
     time_off_allocation_service,
     time_off_request_service,
     time_off_type_service,
@@ -367,12 +370,22 @@ async def update_request(
         )
         req.start_date = effective_start
         req.end_date = effective_end
-        # Recalculate quantity
+        # Recalculate quantity based on employee working schedule
+        emp = await db.get(Employee, req.employee_id, options=[selectinload(Employee.working_schedule)])
+        schedule = emp.working_schedule if emp else None
+        if schedule is None:
+            schedule = await schedule_service.get_default_schedule(db)
+        schedule_days = (
+            {line.day_of_week for line in schedule.lines}
+            if (schedule and schedule.lines)
+            else {0, 1, 2, 3, 4}
+        )
         req.requested_quantity = time_off_request_service.calculate_quantity(
             unit=req.time_off_type.unit,
             start_date=effective_start,
             end_date=effective_end,
             explicit_quantity=data.requested_quantity,
+            schedule_days=schedule_days,
         )
     elif data.requested_quantity is not None:
         req.requested_quantity = data.requested_quantity

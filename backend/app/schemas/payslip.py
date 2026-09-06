@@ -1,6 +1,5 @@
 from datetime import date, datetime
 from decimal import Decimal
-from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -31,7 +30,7 @@ class PayslipResponse(BaseModel):
 
     id: int
     payrun_id: int
-    employee_id: UUID | int | str
+    employee_id: int
     employee_name: str | None = None
     contract_id: int
     salary_structure_id: int

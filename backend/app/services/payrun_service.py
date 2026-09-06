@@ -11,6 +11,7 @@ Handles payrun lifecycle operations:
 from decimal import Decimal
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -236,7 +237,14 @@ async def create_payrun(
         )
         db.add(payslip)
 
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A payslip conflict occurred. A payslip for one or more employees already exists for this period.",
+        ) from exc
 
     loaded = await get_payrun_by_id(db, payrun.id)
     return loaded  # type: ignore[return-value]
