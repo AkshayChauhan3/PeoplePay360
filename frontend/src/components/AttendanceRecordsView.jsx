@@ -146,22 +146,38 @@ const AttendanceRecordsView = ({ filterEmployeeId, onClearFilter, onNavigate, cu
     fetchAttendanceData();
   }, []);
 
-  const handlePersonalPunch = async () => {
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const handleCheckIn = async () => {
     setPunchLoading(true);
     try {
-      if (!punchedIn) {
-        await apiService.checkIn();
-        setPunchedIn(true);
-        showToast('Successfully checked in for today!');
-      } else {
-        await apiService.checkOut();
-        setPunchedIn(false);
-        showToast('Successfully checked out for today.');
-      }
+      await apiService.checkIn();
+      setPunchedIn(true);
+      showToast('Successfully checked in for today!');
       await fetchAttendanceData();
     } catch (err) {
-      console.error('Punch error:', err);
-      alert(`Attendance punch error: ${err.message || 'Please ensure your account is linked to an employee profile.'}`);
+      console.error('Check-in error:', err);
+      alert(`Attendance check-in error: ${err.message || 'Please ensure your account is linked to an employee profile.'}`);
+    } finally {
+      setPunchLoading(false);
+    }
+  };
+
+  const handleCheckOut = async () => {
+    setPunchLoading(true);
+    try {
+      await apiService.checkOut();
+      setPunchedIn(false);
+      showToast('Successfully checked out for today.');
+      await fetchAttendanceData();
+    } catch (err) {
+      console.error('Check-out error:', err);
+      alert(`Attendance check-out error: ${err.message || 'Check if you have an open attendance session.'}`);
     } finally {
       setPunchLoading(false);
     }
@@ -308,7 +324,7 @@ const AttendanceRecordsView = ({ filterEmployeeId, onClearFilter, onNavigate, cu
 
   const filtered = filter === 'All' ? baseRecords : baseRecords.filter(r => r.status === filter);
 
-  // Dynamic KPI counts
+  // Dynamic KPI counts for workforce/admin view
   const presentCount = summary?.present_today ?? records.filter(r => r.status === 'On Time' || r.status === 'Late In').length;
   const onLeaveCount = summary?.on_leave_today ?? 0;
   const lateCount = summary?.late_today ?? records.filter(r => r.status === 'Late In').length;
@@ -320,6 +336,342 @@ const AttendanceRecordsView = ({ filterEmployeeId, onClearFilter, onNavigate, cu
 
   const filteredEmpObj = filterEmployeeId ? employees.find(e => e.id === Number(filterEmployeeId)) : null;
 
+  // ---------------------------------------------------------------------------
+  // Employee Perspective Detection & Data Derivation
+  // ---------------------------------------------------------------------------
+  const isEmployeeRole = currentUser?.role === 'EMPLOYEE';
+
+  const myEmployee = employees.find(e => 
+    (currentUser?.employee_id && e.id === Number(currentUser.employee_id)) ||
+    (currentUser?.email && e.email?.toLowerCase() === currentUser.email.toLowerCase())
+  ) || null;
+
+  const myRecords = records.filter(r => {
+    if (myEmployee) {
+      return r.employeeId === myEmployee.id || r.empCode === myEmployee.employee_code;
+    }
+    if (currentUser?.employee_id) {
+      return r.employeeId === Number(currentUser.employee_id);
+    }
+    return true;
+  });
+
+  const empFiltered = filter === 'All' ? myRecords : myRecords.filter(r => r.status === filter);
+
+  // Employee personal monthly stats
+  const empPresentCount = myRecords.filter(r => r.status === 'On Time' || r.status === 'Late In' || r.rawStatus === 'PRESENT').length;
+  const empLateCount = myRecords.filter(r => r.status === 'Late In' || r.rawStatus === 'LATE').length;
+  const empIncompleteCount = myRecords.filter(r => r.rawStatus === 'INCOMPLETE').length;
+  const empTotalHoursNum = myRecords.reduce((acc, r) => {
+    const h = parseFloat(r.hours);
+    return acc + (isNaN(h) ? 0 : h);
+  }, 0);
+  const empAvgDailyHours = myRecords.length > 0 ? (empTotalHoursNum / myRecords.length).toFixed(1) : '0.0';
+  const empOnTimeRate = empPresentCount > 0 ? Math.round(((empPresentCount - empLateCount) / empPresentCount) * 100) : 100;
+
+  // ---------------------------------------------------------------------------
+  // 1. DEDICATED EMPLOYEE ATTENDANCE UI (Clean, Personal, No Management Clutter)
+  // ---------------------------------------------------------------------------
+  if (isEmployeeRole) {
+    return (
+      <>
+        <div className="dashboard-header-strip">
+          <div className="dashboard-title">
+            <div className="text-xs font-semibold mb-1" style={{ color: 'var(--secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              MY ATTENDANCE • PUNCH CLOCK
+            </div>
+            <h2 style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--primary)', margin: 0 }}>
+              My Attendance & Time Log
+            </h2>
+            <p className="mt-1 text-sm" style={{ color: 'var(--text-secondary)' }}>
+              Personal work shifts, real-time punch clock, and your monthly attendance overview.
+            </p>
+          </div>
+          {myEmployee && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', background: '#f8fafc', border: '1px solid #e2e8f0', padding: '8px 16px', borderRadius: '10px' }}>
+              <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 700 }}>
+                {myEmployee.first_name?.[0]}{myEmployee.last_name?.[0]}
+              </div>
+              <div>
+                <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                  {myEmployee.first_name} {myEmployee.last_name}
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                  {myEmployee.employee_code} · {myEmployee.department_name || 'Team Member'}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {toastMsg && (
+          <div style={{ background: '#ecfdf5', border: '1px solid #10b981', color: '#065f46', padding: '10px 16px', borderRadius: '8px', marginBottom: '16px', fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span>✓</span> {toastMsg}
+          </div>
+        )}
+
+        {/* VIRTUAL PUNCH CLOCK WIDGET */}
+        <div style={{
+          background: 'linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)',
+          border: '1px solid #e2e8f0',
+          borderRadius: '16px',
+          padding: '24px 32px',
+          marginBottom: '24px',
+          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '24px'
+        }}>
+          {/* Digital Clock and Date */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+              Current System Time
+            </div>
+            <div style={{ fontSize: '2.5rem', fontWeight: 800, fontFamily: 'monospace', color: 'var(--primary)', letterSpacing: '-0.02em', lineHeight: 1.1 }}>
+              {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+            </div>
+            <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-secondary)' }}>
+              {currentTime.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+            </div>
+          </div>
+
+          {/* Status Indicator */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '12px 24px', background: punchedIn ? '#ecfdf5' : '#f8fafc', border: `1px solid ${punchedIn ? '#a7f3d0' : '#e2e8f0'}`, borderRadius: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+              <span style={{
+                display: 'inline-block',
+                width: '10px',
+                height: '10px',
+                borderRadius: '50%',
+                background: punchedIn ? '#10b981' : '#94a3b8',
+                boxShadow: punchedIn ? '0 0 0 3px rgba(16, 185, 129, 0.3)' : 'none'
+              }}></span>
+              <span style={{ fontSize: '14px', fontWeight: 700, color: punchedIn ? '#065f46' : '#475569' }}>
+                {punchedIn ? 'Shift Active · Punched In' : 'Not Clocked In'}
+              </span>
+            </div>
+            <span style={{ fontSize: '12px', color: punchedIn ? '#047857' : '#64748b' }}>
+              {punchedIn ? 'Shift in progress. Remember to check out when leaving.' : 'Record your shift start to begin your workday.'}
+            </span>
+          </div>
+
+          {/* Action Punch Buttons - DISTINCT Check In and Check Out, NO BREAK BUTTON */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <button
+              onClick={handleCheckIn}
+              disabled={punchLoading || punchedIn}
+              style={{
+                padding: '14px 28px',
+                borderRadius: '10px',
+                border: 'none',
+                background: punchedIn ? '#e2e8f0' : 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+                color: punchedIn ? '#94a3b8' : '#ffffff',
+                fontSize: '15px',
+                fontWeight: 700,
+                cursor: punchedIn || punchLoading ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                boxShadow: punchedIn ? 'none' : '0 4px 12px rgba(5, 150, 105, 0.25)',
+                transition: 'all 0.2s ease',
+                opacity: punchLoading ? 0.7 : 1,
+              }}
+              title={punchedIn ? 'Already clocked in for current shift' : 'Click to clock in'}
+            >
+              <span style={{ fontSize: '16px' }}>▶️</span>
+              <span>{punchLoading && !punchedIn ? 'Clocking In...' : 'Check In'}</span>
+            </button>
+
+            <button
+              onClick={handleCheckOut}
+              disabled={punchLoading || !punchedIn}
+              style={{
+                padding: '14px 28px',
+                borderRadius: '10px',
+                border: 'none',
+                background: !punchedIn ? '#e2e8f0' : 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)',
+                color: !punchedIn ? '#94a3b8' : '#ffffff',
+                fontSize: '15px',
+                fontWeight: 700,
+                cursor: !punchedIn || punchLoading ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                boxShadow: !punchedIn ? 'none' : '0 4px 12px rgba(220, 38, 38, 0.25)',
+                transition: 'all 0.2s ease',
+                opacity: punchLoading ? 0.7 : 1,
+              }}
+              title={!punchedIn ? 'Must be clocked in before clocking out' : 'Click to clock out'}
+            >
+              <span style={{ fontSize: '16px' }}>⏹️</span>
+              <span>{punchLoading && punchedIn ? 'Clocking Out...' : 'Check Out'}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* PERSONAL MONTHLY METRIC CARDS */}
+        <div className="grid grid-cols-4 gap-4 mb-6">
+          <div className="kpi-card">
+            <div className="kpi-title">Days Present</div>
+            <div className="kpi-value-row">
+              <span className="kpi-value tabular-nums" style={{ color: 'var(--success)' }}>{empPresentCount}</span>
+            </div>
+            <div className="kpi-subtext">Recorded shifts this month</div>
+          </div>
+
+          <div className="kpi-card">
+            <div className="kpi-title">On-Time Rate</div>
+            <div className="kpi-value-row">
+              <span className="kpi-value tabular-nums" style={{ color: 'var(--primary)' }}>{empOnTimeRate}%</span>
+            </div>
+            <div className="kpi-subtext">{empLateCount} late arrivals</div>
+          </div>
+
+          <div className="kpi-card">
+            <div className="kpi-title">Avg Daily Hours</div>
+            <div className="kpi-value-row">
+              <span className="kpi-value tabular-nums" style={{ color: 'var(--secondary)' }}>{empAvgDailyHours}h</span>
+            </div>
+            <div className="kpi-subtext">{empTotalHoursNum.toFixed(1)}h total logged</div>
+          </div>
+
+          <div className="kpi-card">
+            <div className="kpi-title">Incomplete Punches</div>
+            <div className="kpi-value-row">
+              <span className="kpi-value tabular-nums" style={{ color: empIncompleteCount > 0 ? '#b45309' : 'var(--success)' }}>
+                {empIncompleteCount}
+              </span>
+            </div>
+            <div className="kpi-subtext">{empIncompleteCount > 0 ? 'Requires HR adjustment' : 'All shifts closed cleanly'}</div>
+          </div>
+        </div>
+
+        {/* FILTER BAR FOR EMPLOYEE */}
+        <div className="dashboard-filter-bar mb-4" style={{ display: 'flex', gap: '8px' }}>
+          {['All', 'On Time', 'Late In', 'Incomplete', 'Half Day', 'Absent'].map(status => (
+            <button
+              key={status}
+              onClick={() => setFilter(status)}
+              className={`filter-chip ${filter === status ? 'active' : ''}`}
+              style={{
+                padding: '6px 14px',
+                borderRadius: '20px',
+                border: filter === status ? '1px solid var(--primary)' : '1px solid var(--border-structural)',
+                background: filter === status ? 'var(--primary)' : 'white',
+                color: filter === status ? 'white' : 'var(--text-secondary)',
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}
+            >
+              <span>{status}</span>
+              {status === 'Incomplete' && empIncompleteCount > 0 && (
+                <span style={{ background: filter === status ? 'white' : '#fef3c7', color: filter === status ? '#b45309' : '#92400e', padding: '1px 6px', borderRadius: '10px', fontSize: '10px', fontWeight: 700 }}>
+                  {empIncompleteCount}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* PERSONAL ATTENDANCE TABLE (NO MANAGER ACTIONS) */}
+        <div className="card-panel" style={{ padding: 0, overflow: 'hidden' }}>
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Shift Status</th>
+                <th>Check In Time</th>
+                <th>Check Out Time</th>
+                <th>Hours Worked</th>
+                <th>Notes / Remarks</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan="6" style={{ textAlign: 'center', padding: '48px 16px', color: 'var(--text-secondary)' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ width: '28px', height: '28px', border: '3px solid var(--border-structural)', borderTopColor: 'var(--primary)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}></div>
+                      <span style={{ fontSize: '13px', fontWeight: 500 }}>Loading your attendance history...</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : empFiltered.length === 0 ? (
+                <tr>
+                  <td colSpan="6" style={{ textAlign: 'center', padding: '48px 16px', color: 'var(--text-secondary)' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+                      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ opacity: 0.4 }}>
+                        <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+                      </svg>
+                      <div style={{ fontWeight: 600, fontSize: '15px', color: 'var(--text-primary)' }}>No attendance entries found</div>
+                      <div style={{ fontSize: '13px', maxWidth: '360px' }}>
+                        {filter !== 'All' 
+                          ? `No attendance records match the "${filter}" filter.` 
+                          : 'No attendance records logged for your profile yet. Use the punch clock above to record your first shift.'}
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                empFiltered.map((rec, i) => {
+                  const ss = statusStyle[rec.status] || { bg: '#f7fafa', text: '#49636a' };
+                  const isIncomplete = rec.rawStatus === 'INCOMPLETE';
+                  return (
+                    <tr key={`${rec.id}-${i}`} onMouseEnter={e => e.currentTarget.style.background = '#f7fafa'} onMouseLeave={e => e.currentTarget.style.background = 'white'}>
+                      <td className="font-bold text-[13px]" style={{ color: 'var(--text-primary)' }}>
+                        {rec.date}
+                      </td>
+                      <td>
+                        <span style={{ background: ss.bg, color: ss.text, fontSize: '0.75rem', fontWeight: 700, padding: '0.2rem 0.6rem', borderRadius: '6px' }}>
+                          {rec.status}
+                        </span>
+                      </td>
+                      <td className="text-xs font-semibold" style={{ color: rec.checkIn === '--' ? 'var(--text-secondary)' : 'var(--text-primary)' }}>
+                        {rec.checkIn}
+                      </td>
+                      <td className="text-xs font-semibold" style={{ color: rec.checkOut === '--' ? '#b45309' : 'var(--text-primary)' }}>
+                        {rec.checkOut === '--' ? (
+                          <span style={{ color: '#b45309', fontWeight: 700, background: '#fef3c7', padding: '2px 6px', borderRadius: '4px' }}>
+                            Missing Check-Out
+                          </span>
+                        ) : rec.checkOut}
+                      </td>
+                      <td className="text-xs font-bold" style={{ color: 'var(--secondary)' }}>
+                        {rec.hours}
+                      </td>
+                      <td className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                        {isIncomplete ? (
+                          <span style={{ color: '#b45309', fontWeight: 600 }}>
+                            ⚠️ Shift missing check-out. Pending HR correction.
+                          </span>
+                        ) : rec.isManualEdit ? (
+                          <span style={{ color: '#4338ca', fontWeight: 500 }} title={rec.correctionReason || ''}>
+                            ✏️ Adjusted: {rec.correctionReason || 'HR Correction'}
+                          </span>
+                        ) : (
+                          <span style={{ color: '#059669' }}>✓ Verified standard shift</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </>
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // 2. ADMIN & HR MANAGEMENT ATTENDANCE UI (Workforce Telemetry & Corrections)
+  // ---------------------------------------------------------------------------
   return (
     <>
       <div className="dashboard-header-strip">
@@ -329,14 +681,41 @@ const AttendanceRecordsView = ({ filterEmployeeId, onClearFilter, onNavigate, cu
           <p className="mt-1 text-sm" style={{ color: 'var(--text-secondary)' }}>Live daily punch-in/out logs, biometric tracking, shift calculation, and manager corrections.</p>
         </div>
         <div className="flex items-center gap-2">
+          {/* Distinct Check In and Check Out buttons for Admin Personal Punch (NO BREAK BUTTON) */}
           <button 
             className="btn-primary" 
-            onClick={handlePersonalPunch}
-            disabled={punchLoading}
-            style={{ background: punchedIn ? 'var(--critical, #dc2626)' : 'var(--success, #0b7a42)', border: 'none', display: 'flex', alignItems: 'center', gap: '6px' }}
-            title={punchedIn ? "Check out your personal session" : "Check in for today"}
+            onClick={handleCheckIn}
+            disabled={punchLoading || punchedIn}
+            style={{ 
+              background: punchedIn ? '#9ca3af' : 'var(--success, #0b7a42)', 
+              border: 'none', 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '6px',
+              cursor: punchedIn || punchLoading ? 'not-allowed' : 'pointer',
+              opacity: punchedIn ? 0.6 : 1
+            }}
+            title={punchedIn ? "Already checked in" : "Check in your personal session"}
           >
-            {punchLoading ? 'Processing...' : (punchedIn ? '⏹️ Punch Out' : '▶️ Punch In Now')}
+            {punchLoading && !punchedIn ? 'Checking In...' : '▶️ Check In'}
+          </button>
+          
+          <button 
+            className="btn-primary" 
+            onClick={handleCheckOut}
+            disabled={punchLoading || !punchedIn}
+            style={{ 
+              background: !punchedIn ? '#9ca3af' : 'var(--critical, #dc2626)', 
+              border: 'none', 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '6px',
+              cursor: !punchedIn || punchLoading ? 'not-allowed' : 'pointer',
+              opacity: !punchedIn ? 0.6 : 1
+            }}
+            title={!punchedIn ? "No active session to check out" : "Check out your personal session"}
+          >
+            {punchLoading && punchedIn ? 'Checking Out...' : '⏹️ Check Out'}
           </button>
           
           <button 

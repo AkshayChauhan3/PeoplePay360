@@ -51,6 +51,22 @@ const formatCurrencyShort = (amount) => {
   return `₹${amount.toLocaleString('en-IN')}`;
 };
 
+const checkContractOverlap = (existing, newStart, newEnd) => {
+  if (!existing || (existing.status !== 'RUNNING' && existing.status !== 'running')) return false;
+  const s1 = existing.start_date || existing.start;
+  const rawEnd = existing.end_date !== 'Permanent' && existing.end !== 'Permanent' ? (existing.end_date || existing.end) : null;
+  const e1 = rawEnd;
+  const s2 = newStart;
+  const e2 = newEnd || null;
+
+  if (!s1 || !s2) return false;
+  // Condition 1: Existing contract starts before proposed contract ends
+  const cond1 = e2 ? s1 <= e2 : true;
+  // Condition 2: Existing contract ends after proposed contract starts (or is open-ended)
+  const cond2 = e1 ? e1 >= s2 : true;
+  return cond1 && cond2;
+};
+
 const AllContractsView = ({ onNavigate, filterEmployeeId, onClearFilter }) => {
   const [contracts, setContracts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -174,6 +190,19 @@ const AllContractsView = ({ onNavigate, filterEmployeeId, onClearFilter }) => {
       const deptId = newContract.departmentId ? Number(newContract.departmentId) : null;
       const posId = newContract.jobPositionId ? Number(newContract.jobPositionId) : null;
       const contractStatus = newContract.status || 'DRAFT';
+
+      // Overlap test (critical): Block second RUNNING contract if dates overlap
+      if (contractStatus === 'RUNNING') {
+        const foundEmp = employees.find(e => String(e.id) === String(empId));
+        const conflict = contracts.find(c =>
+          (String(c.employeeId) === String(empId) || (foundEmp && String(c.empId) === String(foundEmp.employee_code))) &&
+          c.status === 'RUNNING' &&
+          checkContractOverlap(c, startDate, endDate)
+        );
+        if (conflict) {
+          throw new Error(`Overlap Conflict: Employee already has an active RUNNING contract (${conflict.id}) from ${conflict.start} to ${conflict.end || 'Permanent'}. Overlapping RUNNING contracts are prohibited.`);
+        }
+      }
 
       const res = await apiService.createContract({
         employee_id: Number(empId),
@@ -512,10 +541,17 @@ const AllContractsView = ({ onNavigate, filterEmployeeId, onClearFilter }) => {
       {/* Create Contract Modal */}
       {showModal && (() => {
         const selectedEmployee = employees.find(e => String(e.id) === String(newContract.employeeId));
-        const hasExistingRunningContract = contracts.find(c =>
+        const employeeRunningContracts = contracts.filter(c =>
           (String(c.employeeId) === String(newContract.employeeId) || (selectedEmployee && String(c.empId) === String(selectedEmployee.employee_code))) &&
           c.status === 'RUNNING'
         );
+        const conflictingContract = newContract.status === 'RUNNING'
+          ? employeeRunningContracts.find(c => checkContractOverlap(c, newContract.startDate, newContract.endDate))
+          : null;
+        const isNonOverlappingFuture = newContract.status === 'RUNNING' &&
+          employeeRunningContracts.length > 0 &&
+          !conflictingContract &&
+          employeeRunningContracts.some(c => c.end && c.end !== 'Permanent' && newContract.startDate > c.end);
         const selectedStructure = structures.find(s => String(s.id) === String(newContract.structureId));
 
         return (
@@ -580,13 +616,41 @@ const AllContractsView = ({ onNavigate, filterEmployeeId, onClearFilter }) => {
                       </div>
                     )}
 
-                    {/* Running Contract Warning */}
-                    {hasExistingRunningContract && (
-                      <div style={{ marginTop: '8px', padding: '8px 12px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '6px', fontSize: '12px', color: '#92400e', display: 'flex', alignItems: 'flex-start', gap: '6px' }}>
-                        <span>⚠️</span>
-                        <span>
-                          <strong>Existing Contract Conflict Warning:</strong> Employee already has an active RUNNING contract (<strong>{hasExistingRunningContract.id}</strong>). Setting this contract's initial status to <strong>DRAFT</strong> is recommended to prevent date overlap conflicts.
-                        </span>
+                    {/* Overlap Detected: Critical Block Warning */}
+                    {conflictingContract && (
+                      <div style={{ marginTop: '8px', padding: '10px 14px', background: '#fef2f2', border: '1.5px solid #ef4444', borderRadius: '8px', fontSize: '12px', color: '#991b1b', display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                        <span style={{ fontSize: '16px', lineHeight: 1 }}>🚫</span>
+                        <div>
+                          <strong>Overlap Blocked (Critical):</strong> Employee already has an active RUNNING contract (<strong>{conflictingContract.id}</strong>) scheduled from <strong>{conflictingContract.start}</strong> to <strong>{conflictingContract.end || 'Permanent'}</strong>.
+                          <div style={{ marginTop: '4px', fontSize: '11.5px', color: '#b91c1c', lineHeight: 1.4 }}>
+                            Two RUNNING contracts cannot overlap during the same time window. The system will reject this with <strong>HTTP 409 Conflict</strong>. To proceed:
+                            <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
+                              <li>Set <strong>Effective Start Date</strong> after <strong>{conflictingContract.end === 'Permanent' ? 'the existing contract end date is set' : conflictingContract.end}</strong>, OR</li>
+                              <li>Change <strong>Initial Status</strong> to <strong>DRAFT</strong>.</li>
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Non-overlapping Future Schedule Confirmation */}
+                    {isNonOverlappingFuture && (
+                      <div style={{ marginTop: '8px', padding: '10px 14px', background: '#ecfdf5', border: '1.5px solid #10b981', borderRadius: '8px', fontSize: '12px', color: '#065f46', display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                        <span style={{ fontSize: '16px', color: '#059669', lineHeight: 1 }}>✓</span>
+                        <div>
+                          <strong>Non-overlapping Future Contract Validated:</strong> This contract starts on <strong>{newContract.startDate}</strong>, which is after the existing contract (<strong>{employeeRunningContracts[0].id}</strong>, ending <strong>{employeeRunningContracts[0].end}</strong>) concludes.
+                          <div style={{ marginTop: '2px', fontSize: '11.5px', color: '#047857' }}>
+                            Creation as <strong>RUNNING</strong> is permitted and will be scheduled cleanly.
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* DRAFT Mode Information */}
+                    {newContract.status === 'DRAFT' && employeeRunningContracts.length > 0 && (
+                      <div style={{ marginTop: '8px', padding: '8px 12px', background: '#f0f9ff', border: '1px solid #bae6fd', borderRadius: '6px', fontSize: '12px', color: '#0369a1', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span>ℹ️</span>
+                        <span><strong>DRAFT Mode:</strong> Pre-generation allowed. Date overlap validation will be enforced whenever this draft is activated to RUNNING.</span>
                       </div>
                     )}
                   </div>

@@ -186,9 +186,16 @@ async def list_attendances(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=1000),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_hr_management()),
+    current_user: User = Depends(get_current_user),
 ) -> AttendanceListResponse:
-    """List attendance records with filters and pagination (HR/Admin)."""
+    """List attendance records with filters and pagination (HR/Admin or self-service for employees)."""
+    is_hr = current_user.role_name in _HR_ROLES
+    if not is_hr:
+        if current_user.employee_id is None:
+            return AttendanceListResponse(items=[], total=0, skip=skip, limit=limit)
+        employee_id = current_user.employee_id
+        department_id = None
+
     items, total = await attendance_service.list_attendances(
         db,
         employee_id=employee_id,
